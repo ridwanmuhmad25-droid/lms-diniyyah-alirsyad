@@ -1,0 +1,708 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (
+          request.auth.token.email == 'ridwanmuhmad25@gmail.com' &&
+          request.auth.token.email_verified == true
+        )
+      );
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'nama', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'nama', 'createdAt']) &&
+        data.uid is string && data.uid == request.auth.uid && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email == 'ridwanmuhmad25@gmail.com' &&
+        data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 120 &&
+        data.createdAt == request.time;
+    }
+
+    function isValidUserDoc(data) {
+      return data.keys().hasAll(['uid', 'role', 'nama', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'role', 'studentNis', 'nama', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.role in ['guru', 'siswa'] &&
+        (!('studentNis' in data) || (data.studentNis is string && data.studentNis.size() >= 1 && data.studentNis.size() <= 32)) &&
+        data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 120 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll(['id', 'nis', 'nama', 'kelas', 'tingkat', 'usingDefaultPassword', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'nis', 'nama', 'kelas', 'tingkat', 'usingDefaultPassword', 'uid', 'lastPasswordResetAt', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.nis is string && isValidId(data.nis) && data.nis.size() <= 32 &&
+        data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 120 &&
+        data.kelas is string && data.kelas.size() >= 1 && data.kelas.size() <= 20 &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.usingDefaultPassword is bool &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128)) &&
+        (!('lastPasswordResetAt' in data) || (data.lastPasswordResetAt is string && data.lastPasswordResetAt.size() <= 40)) &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidLearningItem(data) {
+      return data.keys().hasAll(['id', 'type', 'judul', 'tingkat', 'targetKelas', 'mapel', 'deskripsi', 'konten', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'type', 'judul', 'tingkat', 'targetKelas', 'mapel', 'deskripsi', 'konten', 'lampiranNama', 'tenggat', 'durasiMenit', 'hasStructuredSoal', 'totalPoin', 'hasEssay', 'soalCount', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.type in ['materi', 'tugas'] &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 200 &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.targetKelas is string && data.targetKelas.size() >= 1 && data.targetKelas.size() <= 20 &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.deskripsi is string && data.deskripsi.size() >= 1 && data.deskripsi.size() <= 500 &&
+        data.konten is string && data.konten.size() >= 1 && data.konten.size() <= 15000 &&
+        (!('lampiranNama' in data) || (data.lampiranNama is string && data.lampiranNama.size() <= 200)) &&
+        (!('tenggat' in data) || (data.tenggat is string && data.tenggat.size() <= 30)) &&
+        (!('durasiMenit' in data) || (data.durasiMenit is number && data.durasiMenit >= 1 && data.durasiMenit <= 600)) &&
+        (!('hasStructuredSoal' in data) || data.hasStructuredSoal is bool) &&
+        (!('totalPoin' in data) || (data.totalPoin is number && data.totalPoin >= 0 && data.totalPoin <= 10000)) &&
+        (!('hasEssay' in data) || data.hasEssay is bool) &&
+        (!('soalCount' in data) || (data.soalCount is number && data.soalCount >= 0 && data.soalCount <= 100)) &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 30 &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidTugas(data) {
+      return data.keys().hasAll(['id', 'itemId', 'judul', 'tingkat', 'targetKelas', 'mapel', 'durasiMenit', 'totalPoin', 'hasEssay', 'soalList', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'itemId', 'judul', 'tingkat', 'targetKelas', 'mapel', 'durasiMenit', 'totalPoin', 'hasEssay', 'soalList', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.itemId is string && isValidId(data.itemId) &&
+        data.id == data.itemId &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 200 &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.targetKelas is string && data.targetKelas.size() >= 1 && data.targetKelas.size() <= 20 &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.durasiMenit is number && data.durasiMenit >= 1 && data.durasiMenit <= 600 &&
+        data.totalPoin is number && data.totalPoin >= 0 && data.totalPoin <= 10000 &&
+        data.hasEssay is bool &&
+        data.soalList is list && data.soalList.size() >= 1 && data.soalList.size() <= 100 && data.soalList[0] is map &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidKunciTugas(data) {
+      return data.keys().hasAll(['id', 'itemId', 'tingkat', 'mapel', 'kunciList', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'itemId', 'tingkat', 'mapel', 'kunciList', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.itemId is string && isValidId(data.itemId) &&
+        data.id == data.itemId &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.kunciList is list && data.kunciList.size() >= 1 && data.kunciList.size() <= 100 && data.kunciList[0] is map &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidReadRecord(data) {
+      return data.keys().hasAll(['itemId', 'studentNis', 'uid', 'readAt', 'updatedAt']) &&
+        data.keys().hasOnly(['itemId', 'studentNis', 'uid', 'readAt', 'updatedAt']) &&
+        data.itemId is string && isValidId(data.itemId) &&
+        data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.readAt is string && data.readAt.size() >= 1 && data.readAt.size() <= 40 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['itemId', 'studentNis', 'uid', 'status', 'updatedAt']) &&
+        data.keys().hasOnly(['itemId', 'studentNis', 'uid', 'status', 'sessionStatus', 'startedAt', 'startedAtMs', 'durasiMenit', 'violationCount', 'lastSavedAt', 'jawaban', 'structuredAnswers', 'itemScores', 'autoScore', 'essayScore', 'finalScore', 'maxScore', 'gradingStatus', 'catatanGuru', 'gradedAt', 'fileNama', 'submittedAt', 'submittedAtMs', 'updatedAt']) &&
+        data.itemId is string && isValidId(data.itemId) &&
+        data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.status in ['Selesai', 'Belum'] &&
+        (!('sessionStatus' in data) || data.sessionStatus in ['in_progress', 'completed']) &&
+        (!('startedAt' in data) || (data.startedAt is string && data.startedAt.size() <= 40)) &&
+        (!('startedAtMs' in data) || (data.startedAtMs is number && data.startedAtMs >= 1000000000000 && data.startedAtMs <= 9999999999999)) &&
+        (!('durasiMenit' in data) || (data.durasiMenit is number && data.durasiMenit >= 1 && data.durasiMenit <= 600)) &&
+        (!('violationCount' in data) || (data.violationCount is number && data.violationCount >= 0 && data.violationCount <= 500)) &&
+        (!('lastSavedAt' in data) || (data.lastSavedAt is string && data.lastSavedAt.size() <= 40)) &&
+        (!('jawaban' in data) || (data.jawaban is string && data.jawaban.size() <= 15000)) &&
+        (!('structuredAnswers' in data) || (data.structuredAnswers is map && data.structuredAnswers.size() <= 100)) &&
+        (!('itemScores' in data) || (data.itemScores is map && data.itemScores.size() <= 100)) &&
+        (!('autoScore' in data) || (data.autoScore is number && data.autoScore >= 0 && data.autoScore <= 10000)) &&
+        (!('essayScore' in data) || (data.essayScore is number && data.essayScore >= 0 && data.essayScore <= 10000)) &&
+        (!('finalScore' in data) || (data.finalScore is number && data.finalScore >= 0 && data.finalScore <= 10000)) &&
+        (!('maxScore' in data) || (data.maxScore is number && data.maxScore >= 0 && data.maxScore <= 10000)) &&
+        (!('gradingStatus' in data) || data.gradingStatus in ['pending_auto_grade', 'waiting_essay', 'graded']) &&
+        (!('catatanGuru' in data) || (data.catatanGuru is string && data.catatanGuru.size() <= 2000)) &&
+        (!('gradedAt' in data) || (data.gradedAt is string && data.gradedAt.size() <= 40)) &&
+        (!('fileNama' in data) || (data.fileNama is string && data.fileNama.size() <= 200)) &&
+        (!('submittedAt' in data) || (data.submittedAt is string && data.submittedAt.size() <= 40)) &&
+        (!('submittedAtMs' in data) || (data.submittedAtMs is number && data.submittedAtMs >= 1000000000000 && data.submittedAtMs <= 9999999999999)) &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidTahfidzRecord(data) {
+      return data.keys().hasAll(['id', 'studentNis', 'jenisSetoran', 'capaian', 'nilai', 'keputusan', 'catatanGuru', 'tanggal', 'guruNama', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentNis', 'studentUid', 'jenisSetoran', 'capaian', 'nilai', 'keputusan', 'catatanGuru', 'tanggal', 'guruNama', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
+        (!('studentUid' in data) || (data.studentUid is string && data.studentUid.size() <= 128)) &&
+        data.jenisSetoran in ['Baca (Masih Jilid)', 'Setor (Hafalan Al-Quran)'] &&
+        data.capaian is string && data.capaian.size() >= 1 && data.capaian.size() <= 200 &&
+        data.nilai is string && data.nilai.size() >= 1 && data.nilai.size() <= 20 &&
+        data.keputusan in ['Lanjut', 'Mengulang'] &&
+        data.catatanGuru is string && data.catatanGuru.size() >= 1 && data.catatanGuru.size() <= 2000 &&
+        data.tanggal is string && data.tanggal.size() >= 1 && data.tanggal.size() <= 40 &&
+        data.guruNama is string && data.guruNama.size() >= 1 && data.guruNama.size() <= 120 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidJilidBook(data) {
+      return data.keys().hasAll(['id', 'judul', 'deskripsi', 'pages', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'judul', 'deskripsi', 'pages', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 150 &&
+        data.deskripsi is string && data.deskripsi.size() >= 1 && data.deskripsi.size() <= 500 &&
+        data.pages is list && data.pages.size() > 0 && data.pages.size() <= 120 && data.pages[0] is map &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 30 &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidJilidProgress(data) {
+      return data.keys().hasAll(['bookId', 'studentNis', 'uid', 'lastPageRead', 'totalPages', 'updatedAt', 'serverUpdatedAt']) &&
+        data.keys().hasOnly(['bookId', 'studentNis', 'uid', 'lastPageRead', 'totalPages', 'updatedAt', 'serverUpdatedAt']) &&
+        data.bookId is string && isValidId(data.bookId) &&
+        data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.lastPageRead is number && data.lastPageRead >= 1 && data.lastPageRead <= 500 &&
+        data.totalPages is number && data.totalPages >= 1 && data.totalPages <= 500 &&
+        data.updatedAt is string && data.updatedAt.size() >= 1 && data.updatedAt.size() <= 40 &&
+        data.serverUpdatedAt == request.time;
+    }
+
+    function isValidJadwalMapel(data) {
+      return data.keys().hasAll(['id', 'hari', 'jamMulai', 'jamSelesai', 'mapel', 'tingkat', 'kelas', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'hari', 'jamMulai', 'jamSelesai', 'mapel', 'tingkat', 'kelas', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.hari in ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] &&
+        data.jamMulai is string && data.jamMulai.size() >= 4 && data.jamMulai.size() <= 10 &&
+        data.jamSelesai is string && data.jamSelesai.size() >= 4 && data.jamSelesai.size() <= 10 &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.kelas is string && data.kelas.size() >= 1 && data.kelas.size() <= 20 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidProtaItem(data) {
+      return data.keys().hasAll(['id', 'mapel', 'tingkat', 'semester', 'bab', 'selesai', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'mapel', 'tingkat', 'semester', 'bab', 'targetBulan', 'selesai', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.semester in ['Ganjil', 'Genap'] &&
+        data.bab is string && data.bab.size() >= 1 && data.bab.size() <= 200 &&
+        (!('targetBulan' in data) || (data.targetBulan is string && data.targetBulan.size() <= 20)) &&
+        data.selesai is bool &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidNotifikasi(data) {
+      return data.keys().hasAll(['id', 'recipientTag', 'targetKelas', 'type', 'itemId', 'mapel', 'judul', 'pesan', 'createdAt', 'createdAtMs', 'senderUid', 'isRead', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'recipientTag', 'targetKelas', 'type', 'itemId', 'mapel', 'judul', 'pesan', 'studentNis', 'studentName', 'createdAt', 'createdAtMs', 'senderUid', 'isRead', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.recipientTag in ['guru', 'siswa_X', 'siswa_XI', 'siswa_XII'] &&
+        data.targetKelas is string && data.targetKelas.size() >= 1 && data.targetKelas.size() <= 20 &&
+        data.type in ['materi', 'tugas', 'submission', 'pengumuman'] &&
+        data.itemId is string && isValidId(data.itemId) &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab', 'Umum'] &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 200 &&
+        data.pesan is string && data.pesan.size() >= 1 && data.pesan.size() <= 500 &&
+        (!('studentNis' in data) || (data.studentNis is string && data.studentNis.size() <= 32)) &&
+        (!('studentName' in data) || (data.studentName is string && data.studentName.size() <= 120)) &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 40 &&
+        data.createdAtMs is number && data.createdAtMs >= 1000000000000 && data.createdAtMs <= 9999999999999 &&
+        data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+        data.isRead is bool &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidNotifikasiRead(data) {
+      return data.keys().hasAll(['id', 'notifId', 'uid', 'readAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'notifId', 'uid', 'readAt', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.notifId is string && isValidId(data.notifId) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.readAt is string && data.readAt.size() >= 1 && data.readAt.size() <= 40 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidStatistikKelas(data) {
+      return data.keys().hasAll(['id', 'kelas', 'tingkat', 'studentCount', 'readDone', 'readTotal', 'readPct', 'taskDone', 'taskTotal', 'taskPct', 'activityPct', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'kelas', 'tingkat', 'studentCount', 'readDone', 'readTotal', 'readPct', 'taskDone', 'taskTotal', 'taskPct', 'activityPct', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.kelas in [
+          'X RPL', 'X TKJ', 'X AK', 'X TP 1', 'X TP 2',
+          'XI RPL', 'XI TKJ', 'XI AK', 'XI TP 1', 'XI TP 2',
+          'XII RPL', 'XII TKJ'
+        ] &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.studentCount is number && data.studentCount >= 0 && data.studentCount <= 500 &&
+        data.readDone is number && data.readDone >= 0 && data.readDone <= 500000 &&
+        data.readTotal is number && data.readTotal >= 0 && data.readTotal <= 500000 &&
+        data.readPct is number && data.readPct >= 0 && data.readPct <= 100 &&
+        data.taskDone is number && data.taskDone >= 0 && data.taskDone <= 500000 &&
+        data.taskTotal is number && data.taskTotal >= 0 && data.taskTotal <= 500000 &&
+        data.taskPct is number && data.taskPct >= 0 && data.taskPct <= 100 &&
+        data.activityPct is number && data.activityPct >= 0 && data.activityPct <= 100 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidPengumuman(data) {
+      return data.keys().hasAll(['id', 'judul', 'isi', 'targetTingkat', 'penting', 'authorName', 'authorUid', 'createdAt', 'createdAtMs', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'judul', 'isi', 'targetTingkat', 'penting', 'authorName', 'authorUid', 'createdAt', 'createdAtMs', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 150 &&
+        data.isi is string && data.isi.size() >= 1 && data.isi.size() <= 1000 &&
+        data.targetTingkat in ['Semua', 'X', 'XI', 'XII'] &&
+        data.penting is bool &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 40 &&
+        data.createdAtMs is number && data.createdAtMs >= 1000000000000 && data.createdAtMs <= 9999999999999 &&
+        data.updatedAt == request.time;
+    }
+
+    // 4. Collection Rules (Ordered: Auth -> Static Validation -> Relational Validation)
+    match /admins/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if isSignedIn() && isValidId(uid) &&
+        uid == request.auth.uid &&
+        isValidAdmin(incoming()) &&
+        request.auth.token.email == 'ridwanmuhmad25@gmail.com' &&
+        request.auth.token.email_verified == true;
+      allow update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(uid) &&
+        uid == request.auth.uid &&
+        isValidUserDoc(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        (incoming().role == 'siswa' || isAdmin());
+      allow update: if isSignedIn() && isValidId(uid) &&
+        isValidUserDoc(incoming()) && (
+          isAdmin() ||
+          (
+            request.auth.uid == uid &&
+            incoming().uid == existing().uid &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['studentNis', 'nama', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(uid) && isAdmin();
+    }
+
+    match /students/{nis} {
+      allow get: if isSignedIn() && isValidId(nis) && (
+        isAdmin() ||
+        resource == null ||
+        !('uid' in existing()) ||
+        existing().uid == request.auth.uid
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(nis) &&
+        isValidStudent(incoming()) &&
+        incoming().nis == nis &&
+        incoming().id == nis &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(nis) &&
+        isValidStudent(incoming()) &&
+        incoming().nis == existing().nis &&
+        incoming().id == existing().id && (
+          isAdmin() ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['usingDefaultPassword', 'updatedAt'])
+          ) ||
+          (
+            !('uid' in existing()) &&
+            incoming().uid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['uid', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(nis) && isAdmin();
+    }
+
+    match /learningItems/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        (
+          resource.data.tingkat == 'X' ||
+          resource.data.tingkat == 'XI' ||
+          resource.data.tingkat == 'XII'
+        )
+      );
+      allow create: if isSignedIn() && isValidId(itemId) &&
+        isValidLearningItem(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(itemId) &&
+        isValidLearningItem(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(itemId) && isAdmin();
+    }
+
+    match /tugas/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        (
+          resource.data.tingkat == 'X' ||
+          resource.data.tingkat == 'XI' ||
+          resource.data.tingkat == 'XII'
+        )
+      );
+      allow create: if isSignedIn() && isValidId(itemId) &&
+        isValidTugas(incoming()) &&
+        incoming().id == itemId &&
+        incoming().itemId == itemId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(itemId) &&
+        isValidTugas(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().itemId == existing().itemId &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(itemId) && isAdmin();
+    }
+
+    match /kunci_tugas/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && (
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          'studentNis' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+          exists(/databases/$(database)/documents/submissions/$(itemId + '__' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentNis)) &&
+          get(/databases/$(database)/documents/submissions/$(itemId + '__' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentNis)).data.status == 'Selesai'
+        )
+      );
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(itemId) &&
+        isValidKunciTugas(incoming()) &&
+        incoming().id == itemId &&
+        incoming().itemId == itemId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(itemId) &&
+        isValidKunciTugas(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().itemId == existing().itemId &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(itemId) && isAdmin();
+    }
+
+    match /readRecords/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && (
+        existing().uid == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(recordId) &&
+        isValidReadRecord(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        exists(/databases/$(database)/documents/learningItems/$(incoming().itemId));
+      allow update: if isSignedIn() && isValidId(recordId) &&
+        isValidReadRecord(incoming()) && (
+          isAdmin() ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().itemId == existing().itemId &&
+            incoming().studentNis == existing().studentNis &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['readAt', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(recordId) && isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      allow get: if isSignedIn() && isValidId(submissionId) && (
+        existing().uid == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(submissionId) &&
+        isValidSubmission(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        (!('violationCount' in incoming()) || incoming().violationCount == 0) &&
+        (!('autoScore' in incoming()) && !('essayScore' in incoming()) && !('finalScore' in incoming()) && !('itemScores' in incoming()) && !('catatanGuru' in incoming()) && !('gradedAt' in incoming())) &&
+        exists(/databases/$(database)/documents/learningItems/$(incoming().itemId));
+      allow update: if isSignedIn() && isValidId(submissionId) &&
+        isValidSubmission(incoming()) && (
+          isAdmin() ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().itemId == existing().itemId &&
+            incoming().studentNis == existing().studentNis &&
+            existing().status != 'Selesai' &&
+            (!('sessionStatus' in existing()) || existing().sessionStatus != 'completed') &&
+            (!('startedAt' in existing()) || (('startedAt' in incoming()) && incoming().startedAt == existing().startedAt)) &&
+            (!('startedAtMs' in existing()) || (('startedAtMs' in incoming()) && incoming().startedAtMs == existing().startedAtMs)) &&
+            (!('durasiMenit' in existing()) || (('durasiMenit' in incoming()) && incoming().durasiMenit == existing().durasiMenit)) &&
+            (!('violationCount' in existing()) || (('violationCount' in incoming()) && incoming().violationCount >= existing().violationCount)) &&
+            (!('gradingStatus' in incoming()) || incoming().gradingStatus in ['pending_auto_grade', 'graded']) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'sessionStatus', 'jawaban', 'structuredAnswers', 'fileNama', 'submittedAt', 'submittedAtMs', 'lastSavedAt', 'violationCount', 'gradingStatus', 'updatedAt'])
+          ) ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().itemId == existing().itemId &&
+            incoming().studentNis == existing().studentNis &&
+            existing().status == 'Selesai' &&
+            existing().sessionStatus == 'completed' &&
+            ('gradingStatus' in existing()) &&
+            existing().gradingStatus == 'pending_auto_grade' &&
+            incoming().status == 'Selesai' &&
+            incoming().sessionStatus == 'completed' &&
+            ('gradingStatus' in incoming()) &&
+            incoming().gradingStatus in ['waiting_essay', 'graded'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['itemScores', 'autoScore', 'essayScore', 'finalScore', 'maxScore', 'gradingStatus', 'gradedAt', 'updatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(submissionId) && isAdmin();
+    }
+
+    match /tahfidzRecords/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && (
+        existing().studentUid == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(recordId) &&
+        isValidTahfidzRecord(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(recordId) &&
+        isValidTahfidzRecord(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(recordId) && isAdmin();
+    }
+
+    match /jilidBooks/{bookId} {
+      allow get: if isSignedIn() && isValidId(bookId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || isSignedIn();
+      allow create: if isSignedIn() && isValidId(bookId) &&
+        isValidJilidBook(incoming()) &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(bookId) &&
+        isValidJilidBook(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(bookId) && isAdmin();
+    }
+
+    match /jilidProgress/{progressId} {
+      allow get: if isSignedIn() && isValidId(progressId) && (
+        existing().uid == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(progressId) &&
+        isValidJilidProgress(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        exists(/databases/$(database)/documents/jilidBooks/$(incoming().bookId));
+      allow update: if isSignedIn() && isValidId(progressId) &&
+        isValidJilidProgress(incoming()) && (
+          isAdmin() ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().bookId == existing().bookId &&
+            incoming().studentNis == existing().studentNis &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['lastPageRead', 'totalPages', 'updatedAt', 'serverUpdatedAt'])
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(progressId) && isAdmin();
+    }
+
+    match /jadwal_mapel/{jadwalId} {
+      allow get: if isSignedIn() && isValidId(jadwalId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.kelas in [
+          'X RPL', 'X TKJ', 'X AK', 'X TP 1', 'X TP 2',
+          'XI RPL', 'XI TKJ', 'XI AK', 'XI TP 1', 'XI TP 2',
+          'XII RPL', 'XII TKJ'
+        ]
+      );
+      allow create: if isSignedIn() && isValidId(jadwalId) &&
+        isValidJadwalMapel(incoming()) &&
+        incoming().id == jadwalId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(jadwalId) &&
+        isValidJadwalMapel(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(jadwalId) && isAdmin();
+    }
+
+    match /prota/{protaId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(protaId) &&
+        isValidProtaItem(incoming()) &&
+        incoming().id == protaId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(protaId) &&
+        isValidProtaItem(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(protaId) && isAdmin();
+    }
+
+    match /notifikasi/{notifId} {
+      allow get: if isSignedIn() && isValidId(notifId) && (
+        isAdmin() ||
+        existing().recipientTag in ['siswa_X', 'siswa_XI', 'siswa_XII']
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.recipientTag in ['siswa_X', 'siswa_XI', 'siswa_XII']
+      );
+      allow create: if isSignedIn() && isValidId(notifId) &&
+        isValidNotifikasi(incoming()) &&
+        incoming().id == notifId &&
+        incoming().senderUid == request.auth.uid && (
+          isAdmin() ||
+          (
+            incoming().recipientTag == 'guru' &&
+            incoming().type == 'submission' &&
+            incoming().isRead == false
+          )
+        );
+      allow update: if isSignedIn() && isValidId(notifId) &&
+        isValidNotifikasi(incoming()) &&
+        incoming().id == existing().id &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(notifId) && isAdmin();
+    }
+
+    match /notifikasi_dibaca/{readId} {
+      allow get: if isSignedIn() && isValidId(readId) && (
+        existing().uid == request.auth.uid || isAdmin()
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(readId) &&
+        isValidNotifikasiRead(incoming()) &&
+        incoming().id == readId &&
+        incoming().uid == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(readId) &&
+        isValidNotifikasiRead(incoming()) && (
+          isAdmin() ||
+          (
+            existing().uid == request.auth.uid &&
+            incoming().uid == existing().uid &&
+            incoming().id == existing().id &&
+            incoming().notifId == existing().notifId
+          )
+        );
+      allow delete: if isSignedIn() && isValidId(readId) && isAdmin();
+    }
+
+    match /statistik_kelas/{kelasId} {
+      allow get: if isSignedIn() && isValidId(kelasId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.tingkat in ['X', 'XI', 'XII']
+      );
+      allow create: if isSignedIn() && isValidId(kelasId) &&
+        isValidStatistikKelas(incoming()) &&
+        incoming().id == kelasId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(kelasId) &&
+        isValidStatistikKelas(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(kelasId) && isAdmin();
+    }
+
+    match /pengumuman/{pengumumanId} {
+      allow get: if isSignedIn() && isValidId(pengumumanId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.targetTingkat in ['Semua', 'X', 'XI', 'XII']
+      );
+      allow create: if isSignedIn() && isValidId(pengumumanId) &&
+        isValidPengumuman(incoming()) &&
+        incoming().id == pengumumanId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(pengumumanId) &&
+        isValidPengumuman(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(pengumumanId) && isAdmin();
+    }
+  }
+}

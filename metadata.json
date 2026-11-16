@@ -1,0 +1,6 @@
+{
+  "name": "LMS Mapel Diniyyah",
+  "description": "Learning Management System untuk mata pelajaran Diniyyah (Aqidah, Tahfidz/Tahsin, dan Bahasa Arab) dengan peran Guru dan Siswa.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

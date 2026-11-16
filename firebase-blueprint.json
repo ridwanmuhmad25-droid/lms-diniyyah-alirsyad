@@ -1,0 +1,384 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Verified administrator account for Guru Mapel Diniyyah.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 150 },
+        "nama": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "nama", "createdAt"]
+    },
+    "UserRoleProfile": {
+      "title": "UserRoleProfile",
+      "description": "Maps authenticated Firebase Auth UID to role and optional student NIS.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "role": { "type": "string", "enum": ["guru", "siswa"] },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "nama": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "nama", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student roster profile mapped to class and grade level (no passwords stored).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "nis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "nama": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "kelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "usingDefaultPassword": { "type": "boolean" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "lastPasswordResetAt": { "type": "string", "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "nis", "nama", "kelas", "tingkat", "usingDefaultPassword", "updatedAt"]
+    },
+    "LearningItem": {
+      "title": "LearningItem",
+      "description": "Learning material or assignment published by Guru for a grade level and subject.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "type": { "type": "string", "enum": ["materi", "tugas"] },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "targetKelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "deskripsi": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "konten": { "type": "string", "minLength": 1, "maxLength": 15000 },
+        "lampiranNama": { "type": "string", "maxLength": 200 },
+        "tenggat": { "type": "string", "maxLength": 30 },
+        "durasiMenit": { "type": "number" },
+        "hasStructuredSoal": { "type": "boolean" },
+        "totalPoin": { "type": "number" },
+        "hasEssay": { "type": "boolean" },
+        "soalCount": { "type": "number" },
+        "createdAt": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "judul", "tingkat", "targetKelas", "mapel", "deskripsi", "konten", "createdAt", "authorName", "authorUid", "updatedAt"]
+    },
+    "Tugas": {
+      "title": "Tugas",
+      "description": "Structured assignment questions (Pilihan Ganda, Isian Singkat, Menjodohkan with shuffled right options, Essay) without answer keys.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "targetKelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "durasiMenit": { "type": "number" },
+        "totalPoin": { "type": "number" },
+        "hasEssay": { "type": "boolean" },
+        "soalList": { "type": "array" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "itemId", "judul", "tingkat", "targetKelas", "mapel", "durasiMenit", "totalPoin", "hasEssay", "soalList", "authorUid", "updatedAt"]
+    },
+    "KunciTugas": {
+      "title": "KunciTugas",
+      "description": "Isolated answer keys and essay rubrics for structured assignments. Never loaded while student session is in_progress.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "kunciList": { "type": "array" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "itemId", "tingkat", "mapel", "kunciList", "authorUid", "updatedAt"]
+    },
+    "MaterialReadRecord": {
+      "title": "MaterialReadRecord",
+      "description": "Tracks when a student has opened and read a learning material.",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readAt": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["itemId", "studentNis", "uid", "readAt", "updatedAt"]
+    },
+    "AssignmentSubmission": {
+      "title": "AssignmentSubmission",
+      "description": "Tracks student assignment submission status, locked exam timing, violations, and answer.",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["Selesai", "Belum"] },
+        "sessionStatus": { "type": "string", "enum": ["in_progress", "completed"] },
+        "startedAt": { "type": "string", "maxLength": 40 },
+        "startedAtMs": { "type": "number" },
+        "durasiMenit": { "type": "number" },
+        "violationCount": { "type": "number" },
+        "lastSavedAt": { "type": "string", "maxLength": 40 },
+        "jawaban": { "type": "string", "maxLength": 5000 },
+        "structuredAnswers": { "type": "object" },
+        "itemScores": { "type": "object" },
+        "autoScore": { "type": "number" },
+        "essayScore": { "type": "number" },
+        "finalScore": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "gradingStatus": { "type": "string", "enum": ["pending_auto_grade", "waiting_essay", "graded"] },
+        "catatanGuru": { "type": "string", "maxLength": 2000 },
+        "gradedAt": { "type": "string", "maxLength": 40 },
+        "fileNama": { "type": "string", "maxLength": 200 },
+        "submittedAt": { "type": "string", "maxLength": 40 },
+        "submittedAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["itemId", "studentNis", "uid", "status", "updatedAt"]
+    },
+    "TahfidzRecord": {
+      "title": "TahfidzRecord",
+      "description": "Tahfidz/Tahsin deposit evaluation record created by Guru.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentUid": { "type": "string", "maxLength": 128 },
+        "jenisSetoran": { "type": "string", "enum": ["Baca (Masih Jilid)", "Setor (Hafalan Al-Quran)"] },
+        "capaian": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "nilai": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "keputusan": { "type": "string", "enum": ["Lanjut", "Mengulang"] },
+        "catatanGuru": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "tanggal": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "guruNama": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentNis", "jenisSetoran", "capaian", "nilai", "keputusan", "catatanGuru", "tanggal", "guruNama", "authorUid", "updatedAt"]
+    },
+    "JilidBook": {
+      "title": "JilidBook",
+      "description": "Interactive E-Book Jilid metadata referencing ordered page image URLs stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "deskripsi": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "pages": { "type": "array" },
+        "createdAt": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "judul", "deskripsi", "pages", "createdAt", "authorName", "authorUid", "updatedAt"]
+    },
+    "JilidReadProgress": {
+      "title": "JilidReadProgress",
+      "description": "Automatic per-student reading progress for each Jilid E-Book.",
+      "type": "object",
+      "properties": {
+        "bookId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "lastPageRead": { "type": "number" },
+        "totalPages": { "type": "number" },
+        "updatedAt": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "serverUpdatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["bookId", "studentNis", "uid", "lastPageRead", "totalPages", "updatedAt", "serverUpdatedAt"]
+    },
+    "JadwalMapel": {
+      "title": "JadwalMapel",
+      "description": "Weekly class and teaching schedule per subject, grade, and class.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "hari": { "type": "string", "enum": ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"] },
+        "jamMulai": { "type": "string", "minLength": 4, "maxLength": 10 },
+        "jamSelesai": { "type": "string", "minLength": 4, "maxLength": 10 },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "kelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "hari", "jamMulai", "jamSelesai", "mapel", "tingkat", "kelas", "authorUid", "updatedAt"]
+    },
+    "ProtaItem": {
+      "title": "ProtaItem",
+      "description": "Program Tahunan (PROTA) syllabus chapter completion record managed by Guru.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "semester": { "type": "string", "enum": ["Ganjil", "Genap"] },
+        "bab": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "targetBulan": { "type": "string", "maxLength": 20 },
+        "selesai": { "type": "boolean" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "mapel", "tingkat", "semester", "bab", "selesai", "authorUid", "updatedAt"]
+    },
+    "Notifikasi": {
+      "title": "Notifikasi",
+      "description": "In-app notifications for Guru (student submissions) and Siswa (new/updated Materi & Tugas).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recipientTag": { "type": "string", "enum": ["guru", "siswa_X", "siswa_XI", "siswa_XII"] },
+        "targetKelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "type": { "type": "string", "enum": ["materi", "tugas", "submission", "pengumuman"] },
+        "itemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab", "Umum"] },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "pesan": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "studentNis": { "type": "string", "maxLength": 32 },
+        "studentName": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "createdAtMs": { "type": "number" },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "isRead": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "recipientTag", "targetKelas", "type", "itemId", "mapel", "judul", "pesan", "createdAt", "createdAtMs", "senderUid", "isRead", "updatedAt"]
+    },
+    "NotifikasiRead": {
+      "title": "NotifikasiRead",
+      "description": "Per-student read tracking marker for broadcast notifications.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "notifId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "readAt": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "notifId", "uid", "readAt", "updatedAt"]
+    },
+    "StatistikKelas": {
+      "title": "StatistikKelas",
+      "description": "Aggregated per-class reading and assignment completion percentages synced by Guru for privacy-safe class leaderboard display.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "kelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "studentCount": { "type": "number" },
+        "readDone": { "type": "number" },
+        "readTotal": { "type": "number" },
+        "readPct": { "type": "number" },
+        "taskDone": { "type": "number" },
+        "taskTotal": { "type": "number" },
+        "taskPct": { "type": "number" },
+        "activityPct": { "type": "number" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "kelas", "tingkat", "studentCount", "readDone", "readTotal", "readPct", "taskDone", "taskTotal", "taskPct", "activityPct", "authorUid", "updatedAt"]
+    },
+    "Pengumuman": {
+      "title": "Pengumuman",
+      "description": "Announcements published by Guru for all grades or a specific grade level (X, XI, XII).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "isi": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "targetTingkat": { "type": "string", "enum": ["Semua", "X", "XI", "XII"] },
+        "penting": { "type": "boolean" },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "createdAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "judul", "isi", "targetTingkat", "penting", "authorName", "authorUid", "createdAt", "createdAtMs", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Verified administrator marker records."
+    },
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserRoleProfile" },
+      "description": "User role and NIS link documents."
+    },
+    "/students/{nis}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student roster documents keyed by NIS."
+    },
+    "/learningItems/{itemId}": {
+      "schema": { "$ref": "#/entities/LearningItem" },
+      "description": "Materials and assignments created by Guru."
+    },
+    "/tugas/{itemId}": {
+      "schema": { "$ref": "#/entities/Tugas" },
+      "description": "Structured assignment questions without answer keys."
+    },
+    "/kunci_tugas/{itemId}": {
+      "schema": { "$ref": "#/entities/KunciTugas" },
+      "description": "Isolated assignment answer keys and essay rubrics."
+    },
+    "/readRecords/{recordId}": {
+      "schema": { "$ref": "#/entities/MaterialReadRecord" },
+      "description": "Student material read tracking records."
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/AssignmentSubmission" },
+      "description": "Student assignment submissions."
+    },
+    "/tahfidzRecords/{recordId}": {
+      "schema": { "$ref": "#/entities/TahfidzRecord" },
+      "description": "Student Tahfidz/Tahsin evaluation records."
+    },
+    "/jilidBooks/{bookId}": {
+      "schema": { "$ref": "#/entities/JilidBook" },
+      "description": "Interactive E-Book Jilid books with external page image URLs."
+    },
+    "/jilidProgress/{progressId}": {
+      "schema": { "$ref": "#/entities/JilidReadProgress" },
+      "description": "Per-student last read page tracking for E-Book Jilid."
+    },
+    "/jadwal_mapel/{jadwalId}": {
+      "schema": { "$ref": "#/entities/JadwalMapel" },
+      "description": "Weekly class teaching schedules."
+    },
+    "/prota/{protaId}": {
+      "schema": { "$ref": "#/entities/ProtaItem" },
+      "description": "Program Tahunan syllabus progress items."
+    },
+    "/notifikasi/{notifId}": {
+      "schema": { "$ref": "#/entities/Notifikasi" },
+      "description": "Activity notifications for Guru and Siswa."
+    },
+    "/notifikasi_dibaca/{readId}": {
+      "schema": { "$ref": "#/entities/NotifikasiRead" },
+      "description": "Per-student read markers for broadcast notifications."
+    },
+    "/statistik_kelas/{kelasId}": {
+      "schema": { "$ref": "#/entities/StatistikKelas" },
+      "description": "Privacy-safe aggregated per-class reading and assignment completion statistics."
+    },
+    "/pengumuman/{pengumumanId}": {
+      "schema": { "$ref": "#/entities/Pengumuman" },
+      "description": "Announcements published by Guru on Papan Pengumuman Diniyyah."
+    }
+  }
+}
+
