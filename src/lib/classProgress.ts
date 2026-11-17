@@ -1,5 +1,6 @@
 import {
   ALL_CLASSES,
+  DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   getGradeFromClass,
   isItemForStudent,
 } from '../data/mockData';
@@ -11,6 +12,7 @@ import {
   MaterialReadRecord,
   StatistikKelasItem,
   Student,
+  TahfidzRecord,
 } from '../types/lms';
 
 export type StudentContributionStatus =
@@ -93,7 +95,9 @@ function evaluateStudentCounts(
   student: Student,
   learningItems: LearningItem[],
   readSet: Set<string>,
-  doneTaskSet: Set<string>
+  doneTaskSet: Set<string>,
+  tahfidzRecords: TahfidzRecord[] = [],
+  tahfidzTaughtClasses: ClassName[] = DEFAULT_TAHFIDZ_TAUGHT_CLASSES
 ): { readDone: number; readTotal: number; taskDone: number; taskTotal: number } {
   let readDone = 0;
   let readTotal = 0;
@@ -101,7 +105,7 @@ function evaluateStudentCounts(
   let taskTotal = 0;
 
   for (const item of learningItems) {
-    if (!isItemForStudent(item, student)) continue;
+    if (!isItemForStudent(item, student, tahfidzRecords, tahfidzTaughtClasses)) continue;
     const key = `${item.id}__${student.nis}`;
     if (item.type === 'materi') {
       readTotal += 1;
@@ -119,7 +123,9 @@ export function computeAllClassProgress(
   students: Student[],
   learningItems: LearningItem[],
   readRecords: MaterialReadRecord[],
-  submissions: AssignmentSubmission[]
+  submissions: AssignmentSubmission[],
+  tahfidzRecords: TahfidzRecord[] = [],
+  tahfidzTaughtClasses: ClassName[] = DEFAULT_TAHFIDZ_TAUGHT_CLASSES
 ): ClassProgressSummary[] {
   const { readSet, doneTaskSet } = buildLookupSets(readRecords, submissions);
 
@@ -147,7 +153,9 @@ export function computeAllClassProgress(
           st,
           learningItems,
           readSet,
-          doneTaskSet
+          doneTaskSet,
+          tahfidzRecords,
+          tahfidzTaughtClasses
         );
         readDone += counts.readDone;
         readTotal += counts.readTotal;
@@ -198,7 +206,9 @@ export function computeStudentsInClassProgress(
   students: Student[],
   learningItems: LearningItem[],
   readRecords: MaterialReadRecord[],
-  submissions: AssignmentSubmission[]
+  submissions: AssignmentSubmission[],
+  tahfidzRecords: TahfidzRecord[] = [],
+  tahfidzTaughtClasses: ClassName[] = DEFAULT_TAHFIDZ_TAUGHT_CLASSES
 ): StudentContributionDetail[] {
   const { readSet, doneTaskSet } = buildLookupSets(readRecords, submissions);
   const classStudents = students.filter((s) => s.kelas === kelas);
@@ -208,7 +218,9 @@ export function computeStudentsInClassProgress(
       student,
       learningItems,
       readSet,
-      doneTaskSet
+      doneTaskSet,
+      tahfidzRecords,
+      tahfidzTaughtClasses
     );
     const { readPct, taskPct, combinedPct } = computeCombinedScorePct(
       readDone,

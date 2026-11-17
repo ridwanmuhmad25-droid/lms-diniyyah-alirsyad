@@ -38,6 +38,8 @@
         "usingDefaultPassword": { "type": "boolean" },
         "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "lastPasswordResetAt": { "type": "string", "maxLength": 40 },
+        "tahfidzCategory": { "type": "string", "enum": ["Jilid", "Tahfidz"] },
+        "tahfidzLevel": { "type": "string", "maxLength": 40 },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "nis", "nama", "kelas", "tingkat", "usingDefaultPassword", "updatedAt"]
@@ -62,6 +64,8 @@
         "totalPoin": { "type": "number" },
         "hasEssay": { "type": "boolean" },
         "soalCount": { "type": "number" },
+        "targetPeserta": { "type": "string", "enum": ["Semua", "Jilid", "Tahfidz"] },
+        "submissionMode": { "type": "string", "enum": ["online", "offline_jilid"] },
         "createdAt": { "type": "string", "minLength": 1, "maxLength": 30 },
         "authorName": { "type": "string", "minLength": 1, "maxLength": 120 },
         "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
@@ -139,6 +143,10 @@
         "essayScore": { "type": "number" },
         "finalScore": { "type": "number" },
         "maxScore": { "type": "number" },
+        "nilaiHuruf": { "type": "string", "enum": ["A", "B", "C"] },
+        "checkedByGuru": { "type": "boolean" },
+        "checkedAt": { "type": "string", "maxLength": 40 },
+        "gradedBy": { "type": "string", "maxLength": 120 },
         "gradingStatus": { "type": "string", "enum": ["pending_auto_grade", "waiting_essay", "graded"] },
         "catatanGuru": { "type": "string", "maxLength": 2000 },
         "gradedAt": { "type": "string", "maxLength": 40 },
@@ -308,6 +316,42 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "judul", "isi", "targetTingkat", "penting", "authorName", "authorUid", "createdAt", "createdAtMs", "updatedAt"]
+    },
+    "UjianTahfidz": {
+      "title": "UjianTahfidz",
+      "description": "School-wide Tahfidz & Jilid level-advancement exam results.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentUid": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "kelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "tanggalUjian": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "penguji": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "levelDiujikan": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "nilai": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "status": { "type": "string", "enum": ["Lulus", "Mengulang"] },
+        "naikKeLevel": { "type": "string", "maxLength": 40 },
+        "catatan": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "studentNis", "studentName", "kelas", "tingkat", "tanggalUjian", "penguji", "levelDiujikan", "nilai", "status", "catatan", "authorUid", "createdAtMs", "updatedAt"]
+    },
+    "PengaturanTahfidzKelas": {
+      "title": "PengaturanTahfidzKelas",
+      "description": "Teacher-configured list of XI/XII classes taught for Tahfidz/Tahsin (excluding XI TKJ and XI AK by default).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "kelasAmpu": { "type": "array" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "kelasAmpu", "authorUid", "updatedAt"]
     }
   },
   "firestore": {
@@ -378,6 +422,14 @@
     "/pengumuman/{pengumumanId}": {
       "schema": { "$ref": "#/entities/Pengumuman" },
       "description": "Announcements published by Guru on Papan Pengumuman Diniyyah."
+    },
+    "/ujian_tahfidz/{examId}": {
+      "schema": { "$ref": "#/entities/UjianTahfidz" },
+      "description": "School-wide Tahfidz/Jilid promotion exam history."
+    },
+    "/pengaturan_lms/{settingId}": {
+      "schema": { "$ref": "#/entities/PengaturanTahfidzKelas" },
+      "description": "LMS configuration documents such as Tahfidz taught classes managed by Guru."
     }
   }
 }

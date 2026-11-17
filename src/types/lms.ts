@@ -18,6 +18,10 @@ export type ClassName =
 
 export type SubjectName = 'Aqidah' | 'Tahfidz/Tahsin' | 'Bahasa Arab';
 
+export type TahfidzCategory = 'Jilid' | 'Tahfidz';
+
+export type LearningTargetPeserta = 'Semua' | 'Jilid' | 'Tahfidz';
+
 export interface Student {
   id: string;
   nis: string;
@@ -28,6 +32,8 @@ export interface Student {
   tingkat: GradeLevel;
   usingDefaultPassword: boolean;
   lastPasswordResetAt?: string;
+  tahfidzCategory?: TahfidzCategory;
+  tahfidzLevel?: string;
 }
 
 export interface Teacher {
@@ -136,6 +142,10 @@ export type GradingStatus =
   | 'waiting_essay'
   | 'graded';
 
+export type LearningSubmissionMode = 'online' | 'offline_jilid';
+
+export type JilidLetterGrade = 'A' | 'B' | 'C';
+
 export interface LearningItem {
   id: string;
   type: LearningItemType;
@@ -153,6 +163,8 @@ export interface LearningItem {
   totalPoin?: number;
   hasEssay?: boolean;
   soalCount?: number;
+  targetPeserta?: LearningTargetPeserta;
+  submissionMode?: LearningSubmissionMode;
   createdAt: string;
   authorName: string;
   authorUid?: string;
@@ -185,6 +197,10 @@ export interface AssignmentSubmission {
   essayScore?: number;
   finalScore?: number;
   maxScore?: number;
+  nilaiHuruf?: JilidLetterGrade;
+  checkedByGuru?: boolean;
+  checkedAt?: string;
+  gradedBy?: string;
   gradingStatus?: GradingStatus;
   catatanGuru?: string;
   gradedAt?: string;
@@ -211,6 +227,26 @@ export interface TahfidzRecord {
   tanggal: string;
   guruNama: string;
   authorUid?: string;
+}
+
+export type UjianTahfidzStatus = 'Lulus' | 'Mengulang';
+
+export interface UjianTahfidzRecord {
+  id: string;
+  studentNis: string;
+  studentUid?: string;
+  studentName: string;
+  kelas: ClassName;
+  tingkat: GradeLevel;
+  tanggalUjian: string;
+  penguji: string;
+  levelDiujikan: string;
+  nilai: string;
+  status: UjianTahfidzStatus;
+  naikKeLevel?: string;
+  catatan: string;
+  authorUid?: string;
+  createdAtMs: number;
 }
 
 export interface JilidPage {

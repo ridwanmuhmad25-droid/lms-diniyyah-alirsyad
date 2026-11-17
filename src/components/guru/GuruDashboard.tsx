@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ArrowLeftRight,
   ArrowRight,
   BookMarked,
   BookOpen,
@@ -16,6 +17,7 @@ import {
   Copy,
   FileSpreadsheet,
   FileText,
+  GraduationCap,
   KeyRound,
   Languages,
   Layers,
@@ -30,6 +32,7 @@ import {
   Pin,
   Plus,
   Search,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
   Sun,
@@ -42,8 +45,10 @@ import {
   ALL_CLASSES,
   ALL_GRADES,
   DEFAULT_STUDENT_PASSWORD,
+  DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   GRADE_CLASSES,
   GURU_PROFILE,
+  TAHFIDZ_ELIGIBLE_CLASSES,
   getGradeFromClass,
   getSubjectsForClass,
   getSubjectsForGrade,
@@ -69,16 +74,25 @@ import {
   ProtaItem,
   Student,
   SubjectName,
+  TahfidzCategory,
   TahfidzDecision,
   TahfidzDepositType,
   TahfidzRecord,
   TugasDocument,
+  UjianTahfidzRecord,
+  UjianTahfidzStatus,
 } from '../../types/lms';
 import { gradeStructuredSubmission } from '../../lib/tugasGrading';
 import {
   computeAllClassProgress,
   computeStudentsInClassProgress,
 } from '../../lib/classProgress';
+import {
+  TAHFIDZ_LEVEL_OPTIONS,
+  getStudentTahfidzProfile,
+  inferCategoryFromLevel,
+  isJilidOfflineTask,
+} from '../../lib/tahfidzUtils';
 import {
   getInitials,
   useCollapsibleSidebar,
@@ -101,9 +115,15 @@ import {
 } from '../../lib/themePalette';
 import { CreateLearningItemModal } from './CreateLearningItemModal';
 import { CsvImportModal } from './CsvImportModal';
+import {
+  JilidTaskChecklistPanel,
+  SaveJilidChecklistPayload,
+} from './JilidTaskChecklistPanel';
 import { KamusArabView } from './KamusArabView';
+import { LaporanHarianTahfidzView } from './LaporanHarianTahfidzView';
 import { ManajemenBukuJilidView } from './ManajemenBukuJilidView';
 import { SubjectMaterialsView } from './SubjectMaterialsView';
+import { UjianKenaikanJuzView } from './UjianKenaikanJuzView';
 
 type GuruTab =
   | 'beranda'
@@ -111,6 +131,7 @@ type GuruTab =
   | 'bahasa_arab'
   | 'aqidah'
   | 'tahfidz'
+  | 'ujian_tahfidz'
   | 'jilid'
   | 'laporan'
   | 'kamus';
@@ -124,16 +145,25 @@ interface GuruDashboardProps {
   readRecords: MaterialReadRecord[];
   submissions: AssignmentSubmission[];
   tahfidzRecords: TahfidzRecord[];
+  ujianTahfidzList?: UjianTahfidzRecord[];
   jilidBooks: JilidBook[];
   jilidProgress: JilidReadProgress[];
   jadwalMapel: JadwalMapelItem[];
   protaList: ProtaItem[];
   pengumumanList?: PengumumanItem[];
+  tahfidzTaughtClasses?: ClassName[];
   notifications: NotifikasiItem[];
   isDark?: boolean;
   onToggleDark?: () => void;
   onImportStudents: (newStudents: Student[]) => Promise<void>;
   onResetStudentPassword: (nis: string) => Promise<void>;
+  onDeleteStudent?: (student: Student) => Promise<void>;
+  onSaveTahfidzTaughtClasses?: (kelasAmpu: ClassName[]) => Promise<void>;
+  onUpdateStudentTahfidzProfile: (
+    nis: string,
+    category: TahfidzCategory,
+    level: string
+  ) => Promise<void>;
   onSaveLearningItemWithSoal: (
     item: LearningItem,
     soalDrafts: GuruSoalDraft[],
@@ -149,8 +179,22 @@ interface GuruDashboardProps {
     maxScore: number,
     catatanGuru: string
   ) => Promise<void>;
+  onSaveJilidSubmissionChecklist?: (
+    payload: SaveJilidChecklistPayload
+  ) => Promise<void>;
   onAddTahfidzRecord: (record: Omit<TahfidzRecord, 'id' | 'tanggal'>) => Promise<void>;
   onDeleteTahfidzRecord: (recordId: string) => Promise<void>;
+  onAddUjianTahfidz: (data: {
+    student: Student;
+    tanggalUjian: string;
+    penguji: string;
+    levelDiujikan: string;
+    nilai: string;
+    status: UjianTahfidzStatus;
+    naikKeLevel?: string;
+    catatan: string;
+  }) => Promise<void>;
+  onDeleteUjianTahfidz: (examId: string) => Promise<void>;
   onAddJilidBook: (book: JilidBook) => Promise<void>;
   onDeleteJilidBook: (book: JilidBook) => Promise<void>;
   onAddJadwalMapel: (jadwal: Omit<JadwalMapelItem, 'id' | 'authorUid'>) => Promise<void>;
@@ -183,21 +227,29 @@ export function GuruDashboard({
   readRecords,
   submissions,
   tahfidzRecords,
+  ujianTahfidzList = [],
   jilidBooks,
   jilidProgress,
   jadwalMapel,
   protaList,
   pengumumanList = [],
+  tahfidzTaughtClasses = DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   notifications,
   isDark = false,
   onToggleDark,
   onImportStudents,
   onResetStudentPassword,
+  onDeleteStudent,
+  onSaveTahfidzTaughtClasses,
+  onUpdateStudentTahfidzProfile,
   onSaveLearningItemWithSoal,
   onDeleteLearningItem,
   onSaveTeacherGrading,
+  onSaveJilidSubmissionChecklist,
   onAddTahfidzRecord,
   onDeleteTahfidzRecord,
+  onAddUjianTahfidz,
+  onDeleteUjianTahfidz,
   onAddJilidBook,
   onDeleteJilidBook,
   onAddJadwalMapel,
@@ -272,8 +324,39 @@ export function GuruDashboard({
   const [newStudentNis, setNewStudentNis] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentClass, setNewStudentClass] = useState<ClassName>('X RPL');
+  const [newStudentTahfidzLevel, setNewStudentTahfidzLevel] = useState<string>('Juz 30');
   const [addStudentError, setAddStudentError] = useState('');
   const [resetConfirmStudent, setResetConfirmStudent] = useState<Student | null>(null);
+  const [deleteConfirmStudent, setDeleteConfirmStudent] = useState<Student | null>(null);
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
+  const [isTahfidzClassesModalOpen, setIsTahfidzClassesModalOpen] = useState(false);
+  const [draftTahfidzClasses, setDraftTahfidzClasses] =
+    useState<ClassName[]>(tahfidzTaughtClasses);
+  const [isSavingTahfidzClasses, setIsSavingTahfidzClasses] = useState(false);
+  const [editingTahfidzStudent, setEditingTahfidzStudent] = useState<Student | null>(null);
+  const [editStudentTahfidzCat, setEditStudentTahfidzCat] =
+    useState<TahfidzCategory>('Tahfidz');
+  const [editStudentTahfidzLevel, setEditStudentTahfidzLevel] = useState<string>('Juz 30');
+  const [isSavingTahfidzProfile, setIsSavingTahfidzProfile] = useState(false);
+  const [togglingCategoryNis, setTogglingCategoryNis] = useState<string | null>(null);
+
+  const handleQuickToggleStudentCategory = async (
+    student: Student,
+    nextCategory: TahfidzCategory,
+    nextLevel: string
+  ) => {
+    setTogglingCategoryNis(student.nis);
+    try {
+      await onUpdateStudentTahfidzProfile(student.nis, nextCategory, nextLevel);
+      showToast(
+        `Status ${student.nama} diubah menjadi ${nextCategory} (${nextLevel}).`
+      );
+    } catch {
+      showToast(`Gagal mengubah status kategori ${student.nama}.`);
+    } finally {
+      setTogglingCategoryNis(null);
+    }
+  };
 
   // Create / Edit Materi & Tugas Modal state
   const [isCreateItemModalOpen, setIsCreateItemModalOpen] = useState(false);
@@ -282,6 +365,7 @@ export function GuruDashboard({
   const [editingLearningItem, setEditingLearningItem] = useState<LearningItem | null>(null);
 
   // Laporan & Grading state
+  const [laporanSubTab, setLaporanSubTab] = useState<'tracking' | 'harian_tahfidz'>('tracking');
   const [reportClassFilter, setReportClassFilter] = useState<ClassName>('X RPL');
   const [reportSubjectFilter, setReportSubjectFilter] = useState<string>('ALL');
   const [reportTypeFilter, setReportTypeFilter] = useState<'ALL' | 'materi' | 'tugas'>('ALL');
@@ -294,15 +378,47 @@ export function GuruDashboard({
   const [draftItemScores, setDraftItemScores] = useState<Record<string, number>>({});
   const [draftCatatanGuru, setDraftCatatanGuru] = useState('');
   const [isSavingGrade, setIsSavingGrade] = useState(false);
+  const [jilidChecklistModal, setJilidChecklistModal] = useState<{
+    item: LearningItem;
+    selectedClass: ClassName;
+  } | null>(null);
 
-  // Tahfidz/Tahsin Setoran state
+  // Tahfidz/Tahsin Setoran state (kecualikan kelas non-ampu seperti XI TKJ & XI AK secara default)
+  const tahfidzAvailableClasses = useMemo<ClassName[]>(
+    () =>
+      TAHFIDZ_ELIGIBLE_CLASSES.filter((cls) =>
+        tahfidzTaughtClasses.includes(cls)
+      ),
+    [tahfidzTaughtClasses]
+  );
+  const [tahfidzInputClass, setTahfidzInputClass] = useState<ClassName>('XI RPL');
+  const activeTahfidzInputClass: ClassName = tahfidzAvailableClasses.includes(
+    tahfidzInputClass
+  )
+    ? tahfidzInputClass
+    : tahfidzAvailableClasses[0] || 'XI RPL';
+  const [tahfidzStudentSearch, setTahfidzStudentSearch] = useState('');
   const tahfidzStudents = useMemo(
     () =>
-      students.filter((s) =>
-        getSubjectsForClass(s.kelas).includes('Tahfidz/Tahsin')
+      students.filter(
+        (s) =>
+          getSubjectsForClass(s.kelas).includes('Tahfidz/Tahsin') &&
+          tahfidzTaughtClasses.includes(s.kelas)
       ),
-    [students]
+    [students, tahfidzTaughtClasses]
   );
+  const tahfidzClassStudents = useMemo(() => {
+    const q = tahfidzStudentSearch.trim().toLowerCase();
+    return tahfidzStudents
+      .filter((s) => {
+        if (s.kelas !== activeTahfidzInputClass) return false;
+        if (q && !s.nama.toLowerCase().includes(q) && !s.nis.toLowerCase().includes(q)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => a.nama.localeCompare(b.nama));
+  }, [tahfidzStudents, activeTahfidzInputClass, tahfidzStudentSearch]);
   const [tahfidzStudentNis, setTahfidzStudentNis] = useState<string>(
     () => tahfidzStudents[0]?.nis || ''
   );
@@ -420,7 +536,7 @@ export function GuruDashboard({
 
     students.forEach((st) => {
       learningItems.forEach((item) => {
-        if (!isItemForStudent(item, st)) return;
+        if (!isItemForStudent(item, st, tahfidzRecords, tahfidzTaughtClasses)) return;
         if (item.type === 'materi') {
           readPossible += 1;
           const hasRead = readRecords.some(
@@ -443,7 +559,7 @@ export function GuruDashboard({
       totalTasksPossible: tasksPossible,
       totalTasksDone: tasksDone,
     };
-  }, [students, learningItems, readRecords, submissions]);
+  }, [students, learningItems, readRecords, submissions, tahfidzRecords, tahfidzTaughtClasses]);
 
   const waitingEssaySubmissions = useMemo(
     () => submissions.filter((s) => s.gradingStatus === 'waiting_essay'),
@@ -456,9 +572,11 @@ export function GuruDashboard({
         students,
         learningItems,
         readRecords,
-        submissions
+        submissions,
+        tahfidzRecords,
+        tahfidzTaughtClasses
       ),
-    [students, learningItems, readRecords, submissions]
+    [students, learningItems, readRecords, submissions, tahfidzRecords, tahfidzTaughtClasses]
   );
 
   const selectedClassSummary = useMemo(
@@ -477,10 +595,12 @@ export function GuruDashboard({
             students,
             learningItems,
             readRecords,
-            submissions
+            submissions,
+            tahfidzRecords,
+            tahfidzTaughtClasses
           )
         : [],
-    [selectedClassDetail, students, learningItems, readRecords, submissions]
+    [selectedClassDetail, students, learningItems, readRecords, submissions, tahfidzRecords, tahfidzTaughtClasses]
   );
 
   const handleCopyIncompleteStudents = async () => {
@@ -794,6 +914,50 @@ export function GuruDashboard({
     setResetConfirmStudent(null);
   };
 
+  const handleConfirmDeleteStudent = async () => {
+    if (!deleteConfirmStudent || !onDeleteStudent || isDeletingStudent) return;
+    setIsDeletingStudent(true);
+    try {
+      await onDeleteStudent(deleteConfirmStudent);
+      showToast(
+        `Siswa ${deleteConfirmStudent.nama} (${deleteConfirmStudent.kelas}) berhasil dihapus.`
+      );
+      setDeleteConfirmStudent(null);
+    } catch {
+      showToast('Gagal menghapus data siswa dari Firestore.');
+    } finally {
+      setIsDeletingStudent(false);
+    }
+  };
+
+  const openTahfidzClassesModal = () => {
+    setDraftTahfidzClasses(
+      TAHFIDZ_ELIGIBLE_CLASSES.filter((cls) =>
+        tahfidzTaughtClasses.includes(cls)
+      )
+    );
+    setIsTahfidzClassesModalOpen(true);
+  };
+
+  const handleSaveTahfidzClassesSetting = async () => {
+    if (!onSaveTahfidzTaughtClasses || isSavingTahfidzClasses) return;
+    setIsSavingTahfidzClasses(true);
+    try {
+      const ordered = TAHFIDZ_ELIGIBLE_CLASSES.filter((cls) =>
+        draftTahfidzClasses.includes(cls)
+      );
+      await onSaveTahfidzTaughtClasses(ordered);
+      setIsTahfidzClassesModalOpen(false);
+      showToast(
+        `Pengaturan kelas ampu Tahfidz disimpan (${ordered.length} kelas aktif).`
+      );
+    } catch {
+      showToast('Gagal menyimpan pengaturan kelas ampu Tahfidz.');
+    } finally {
+      setIsSavingTahfidzClasses(false);
+    }
+  };
+
   const handleAddSingleStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddStudentError('');
@@ -822,10 +986,13 @@ export function GuruDashboard({
           kelas: newStudentClass,
           tingkat: getGradeFromClass(newStudentClass),
           usingDefaultPassword: true,
+          tahfidzLevel: newStudentTahfidzLevel,
+          tahfidzCategory: inferCategoryFromLevel(newStudentTahfidzLevel),
         },
       ]);
       setNewStudentNis('');
       setNewStudentName('');
+      setNewStudentTahfidzLevel('Juz 30');
       setIsAddStudentModalOpen(false);
       showToast(`Siswa "${nama}" (NIS: ${nis}) berhasil ditambahkan ke Firestore.`);
     } catch {
@@ -851,7 +1018,7 @@ export function GuruDashboard({
       }
 
       learningItems.forEach((item) => {
-        if (!isItemForStudent(item, student)) return;
+        if (!isItemForStudent(item, student, tahfidzRecords, tahfidzTaughtClasses)) return;
         if (reportSubjectFilter !== 'ALL' && item.mapel !== reportSubjectFilter) return;
         if (reportTypeFilter !== 'ALL' && item.type !== reportTypeFilter) return;
 
@@ -872,6 +1039,8 @@ export function GuruDashboard({
     learningItems,
     readRecords,
     submissions,
+    tahfidzRecords,
+    tahfidzTaughtClasses,
     reportClassFilter,
     reportSubjectFilter,
     reportTypeFilter,
@@ -922,6 +1091,12 @@ export function GuruDashboard({
       icon: <Users className="h-4 w-4 shrink-0" />,
     },
     {
+      id: 'ujian_tahfidz',
+      label: 'Ujian Kenaikan Juz',
+      shortLabel: 'Ujian Juz',
+      icon: <GraduationCap className="h-4 w-4 shrink-0" />,
+    },
+    {
       id: 'jilid',
       label: 'Manajemen Buku Jilid',
       shortLabel: 'Buku Jilid',
@@ -965,6 +1140,10 @@ export function GuruDashboard({
       active: 'bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-md shadow-teal-500/30',
       inactive: 'bg-teal-500/15 text-teal-600 dark:bg-teal-500/20 dark:text-teal-300',
     },
+    ujian_tahfidz: {
+      active: 'bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-md shadow-emerald-500/30',
+      inactive: 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300',
+    },
     siswa: {
       active: 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-md shadow-sky-500/30',
       inactive: 'bg-sky-500/15 text-sky-600 dark:bg-sky-500/20 dark:text-sky-300',
@@ -1005,15 +1184,16 @@ export function GuruDashboard({
     bahasa_arab: 'Bahasa Arab (Kelas XI & XII)',
     aqidah: 'Aqidah (Kelas X)',
     tahfidz: 'Laporan Setoran Tahfidz/Tahsin',
+    ujian_tahfidz: 'Ujian Tahfidz & Kenaikan Juz Otomatis',
     jilid: 'Manajemen Buku Jilid & Laporan Bacaan',
-    laporan: 'Laporan Baca & Status Tugas',
+    laporan: 'Laporan Baca, Setoran & Status Tugas',
     kamus: 'Kamus Arab (Indonesia ↔ Arab)',
   };
 
   const selectedTahfidzNis =
-    tahfidzStudents.some((s) => s.nis === tahfidzStudentNis)
+    tahfidzClassStudents.some((s) => s.nis === tahfidzStudentNis)
       ? tahfidzStudentNis
-      : tahfidzStudents[0]?.nis || '';
+      : tahfidzClassStudents[0]?.nis || '';
 
   const handleTahfidzSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1059,6 +1239,9 @@ export function GuruDashboard({
   const filteredTahfidzRecords = useMemo(() => {
     return tahfidzRecords.filter((rec) => {
       const st = students.find((s) => s.nis === rec.studentNis);
+      if (st && !tahfidzTaughtClasses.includes(st.kelas)) {
+        return false;
+      }
       if (tahfidzFilterClass !== 'ALL' && st?.kelas !== tahfidzFilterClass) {
         return false;
       }
@@ -1070,7 +1253,13 @@ export function GuruDashboard({
       }
       return true;
     });
-  }, [tahfidzRecords, students, tahfidzFilterClass, tahfidzFilterDecision]);
+  }, [
+    tahfidzRecords,
+    students,
+    tahfidzTaughtClasses,
+    tahfidzFilterClass,
+    tahfidzFilterDecision,
+  ]);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col md:flex-row">
@@ -2326,6 +2515,7 @@ export function GuruDashboard({
                           <th className="py-3 px-4 font-semibold">NIS</th>
                           <th className="py-3 px-4 font-semibold">Nama Siswa</th>
                           <th className="py-3 px-4 font-semibold">Kelas</th>
+                          <th className="py-3 px-4 font-semibold">Kelompok Tahfidz / Jilid</th>
                           <th className="py-3 px-4 font-semibold">Akses Mapel</th>
                           <th className="py-3 px-4 font-semibold">Status Password</th>
                           <th className="py-3 px-4 font-semibold text-right">Aksi</th>
@@ -2334,6 +2524,10 @@ export function GuruDashboard({
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredStudents.map((student) => {
                           const subjects = getSubjectsForClass(student.kelas);
+                          const tahfidzProfile = getStudentTahfidzProfile(
+                            student,
+                            tahfidzRecords
+                          );
                           return (
                             <tr
                               key={student.id}
@@ -2348,6 +2542,51 @@ export function GuruDashboard({
                               <td className="py-3 px-4 text-xs font-medium text-slate-900 dark:text-slate-200 whitespace-nowrap">
                                 {student.kelas}
                               </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                      tahfidzProfile.category === 'Jilid'
+                                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                        : 'bg-teal-500/15 text-teal-700 dark:text-teal-300'
+                                    }`}
+                                  >
+                                    <span>{tahfidzProfile.category}</span>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="font-mono">{tahfidzProfile.level}</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={togglingCategoryNis === student.nis}
+                                    onClick={() => {
+                                      const nextCat: TahfidzCategory =
+                                        tahfidzProfile.category === 'Jilid'
+                                          ? 'Tahfidz'
+                                          : 'Jilid';
+                                      const nextLvl =
+                                        nextCat === 'Tahfidz' ? 'Juz 30' : 'Jilid';
+                                      void handleQuickToggleStudentCategory(
+                                        student,
+                                        nextCat,
+                                        nextLvl
+                                      );
+                                    }}
+                                    title={`Klik untuk ubah dari ${tahfidzProfile.category} ke ${
+                                      tahfidzProfile.category === 'Jilid' ? 'Tahfidz' : 'Jilid'
+                                    }`}
+                                    className="px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-teal-50 dark:hover:bg-teal-950/40 hover:border-teal-400 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 inline-flex items-center gap-1 transition-colors disabled:opacity-50"
+                                  >
+                                    <ArrowLeftRight className="h-3 w-3" />
+                                    <span>
+                                      {togglingCategoryNis === student.nis
+                                        ? '...'
+                                        : tahfidzProfile.category === 'Jilid'
+                                        ? 'Ubah ke Tahfidz'
+                                        : 'Ubah ke Jilid'}
+                                    </span>
+                                  </button>
+                                </div>
+                              </td>
                               <td className="py-3 px-4 text-xs text-slate-600 dark:text-slate-400">
                                 {subjects.join(', ')}
                               </td>
@@ -2357,14 +2596,38 @@ export function GuruDashboard({
                                   : 'Diubah oleh Siswa'}
                               </td>
                               <td className="py-3 px-4 text-right whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => setResetConfirmStudent(student)}
-                                  className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-amber-50 dark:hover:bg-amber-950/50 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-900 dark:hover:text-amber-300 text-xs font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-1.5 transition-colors"
-                                >
-                                  <KeyRound className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                                  <span>Reset Password</span>
-                                </button>
+                                <div className="inline-flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingTahfidzStudent(student);
+                                      setEditStudentTahfidzCat(tahfidzProfile.category);
+                                      setEditStudentTahfidzLevel(tahfidzProfile.level);
+                                    }}
+                                    className="min-h-[38px] px-3 py-1.5 rounded-xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/70 dark:bg-teal-950/30 hover:bg-teal-100 dark:hover:bg-teal-900/40 text-xs font-semibold text-teal-800 dark:text-teal-300 inline-flex items-center gap-1.5 transition-colors"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    <span>Kelompok</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setResetConfirmStudent(student)}
+                                    className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-amber-50 dark:hover:bg-amber-950/50 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-900 dark:hover:text-amber-300 text-xs font-semibold text-slate-900 dark:text-slate-100 inline-flex items-center gap-1.5 transition-colors"
+                                  >
+                                    <KeyRound className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                                    <span>Reset Password</span>
+                                  </button>
+                                  {onDeleteStudent && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeleteConfirmStudent(student)}
+                                      className="min-h-[38px] px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800/80 bg-rose-50/80 dark:bg-rose-950/35 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-xs font-semibold text-rose-700 dark:text-rose-300 inline-flex items-center gap-1.5 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      <span>Hapus</span>
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2407,9 +2670,61 @@ export function GuruDashboard({
             />
           )}
 
-          {/* TAB 4: TAHFIDZ/TAHSIN - INPUT SETORAN SISWA */}
+          {/* TAB 4: TAHFIDZ/TAHSIN - INPUT SETORAN SISWA & PENUGASAN JILID */}
           {activeTab === 'tahfidz' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <div className="space-y-6">
+              {/* Quick Actions Bar */}
+              <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm">
+                <div>
+                  <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                    Manajemen Tahfidz / Tahsin &amp; Penugasan Kelompok Jilid
+                  </h2>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Catat setoran harian siswa per kelas atau buat tugas khusus kelompok Jilid (mis. tugas menulis).
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openCreateItemModal('Tahfidz/Tahsin', 'tugas')}
+                    className={`min-h-[40px] px-4 py-2 text-xs font-semibold inline-flex items-center gap-1.5 ${PRIMARY_CTA_CLASS}`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Buat Tugas Khusus Jilid / Tahfidz</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLaporanSubTab('harian_tahfidz');
+                      selectTab('laporan');
+                    }}
+                    className="min-h-[40px] px-3.5 py-2 rounded-2xl border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-xs font-semibold text-teal-800 dark:text-teal-300 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    <span>Laporan Harian</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectTab('ujian_tahfidz')}
+                    className="min-h-[40px] px-3.5 py-2 rounded-2xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold text-indigo-800 dark:text-indigo-300 inline-flex items-center gap-1.5 transition-colors"
+                  >
+                    <GraduationCap className="h-3.5 w-3.5" />
+                    <span>Ujian Kenaikan Juz</span>
+                  </button>
+                  {onSaveTahfidzTaughtClasses && (
+                    <button
+                      type="button"
+                      onClick={openTahfidzClassesModal}
+                      className="min-h-[40px] px-3.5 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 transition-colors"
+                    >
+                      <Settings2 className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Atur Kelas Ampu Tahfidz</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Form Input Setoran Siswa */}
               <div className="lg:col-span-5 bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
                 <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-400" />
@@ -2423,20 +2738,76 @@ export function GuruDashboard({
                         Input Setoran Siswa
                       </h2>
                       <p className="text-xs text-slate-600 dark:text-slate-400">
-                        Catat capaian jilid atau hafalan Al-Quran siswa Kelas XI & XII.
+                        Pilih kelas terlebih dahulu untuk menampilkan daftar siswa di kelas tersebut.
                       </p>
                     </div>
                   </div>
 
                   <form onSubmit={handleTahfidzSubmit} className="mt-5 space-y-4">
-                    {/* Pilih Siswa */}
+                    {/* Filter Pilih Kelas (Paling Atas) */}
                     <div>
                       <label
-                        htmlFor="tahfidz-student"
+                        htmlFor="tahfidz-input-class"
                         className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5"
                       >
-                        Pilih Siswa
+                        Pilih Kelas
                       </label>
+                      <select
+                        id="tahfidz-input-class"
+                        value={activeTahfidzInputClass}
+                        onChange={(e) => {
+                          setTahfidzInputClass(e.target.value as ClassName);
+                          setTahfidzStudentNis('');
+                        }}
+                        className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                      >
+                        {tahfidzAvailableClasses.map((cls) => {
+                          const countInClass = tahfidzStudents.filter(
+                            (s) => s.kelas === cls
+                          ).length;
+                          return (
+                            <option key={cls} value={cls}>
+                              {cls} ({countInClass} siswa)
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Pencarian Cepat Nama / NIS */}
+                    <div>
+                      <label
+                        htmlFor="tahfidz-student-search"
+                        className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5"
+                      >
+                        Cari Cepat Siswa di {activeTahfidzInputClass} (Nama / NIS)
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+                        <input
+                          id="tahfidz-student-search"
+                          type="search"
+                          value={tahfidzStudentSearch}
+                          onChange={(e) => setTahfidzStudentSearch(e.target.value)}
+                          placeholder="Ketik nama atau NIS untuk filter cepat..."
+                          className="w-full min-h-[42px] pl-10 pr-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pilih Siswa */}
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <label
+                          htmlFor="tahfidz-student"
+                          className="block text-xs font-semibold text-slate-900 dark:text-slate-100"
+                        >
+                          Pilih Siswa
+                        </label>
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                          {tahfidzClassStudents.length} siswa tampil
+                        </span>
+                      </div>
                       <select
                         id="tahfidz-student"
                         value={selectedTahfidzNis}
@@ -2444,11 +2815,20 @@ export function GuruDashboard({
                         required
                         className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
                       >
-                        {tahfidzStudents.map((st) => (
-                          <option key={st.nis} value={st.nis}>
-                            {st.nama} — {st.kelas} (NIS {st.nis})
+                        {tahfidzClassStudents.length === 0 ? (
+                          <option value="">
+                            Tidak ada siswa yang cocok di {activeTahfidzInputClass}
                           </option>
-                        ))}
+                        ) : (
+                          tahfidzClassStudents.map((st) => {
+                            const prof = getStudentTahfidzProfile(st, tahfidzRecords);
+                            return (
+                              <option key={st.nis} value={st.nis}>
+                                {st.nama} (NIS {st.nis}) · {prof.level}
+                              </option>
+                            );
+                          })
+                        )}
                       </select>
                     </div>
 
@@ -2596,7 +2976,8 @@ export function GuruDashboard({
 
                     <button
                       type="submit"
-                      className={`w-full min-h-[46px] px-5 py-2.5 text-sm flex items-center justify-center gap-2 ${PRIMARY_CTA_CLASS}`}
+                      disabled={!selectedTahfidzNis}
+                      className={`w-full min-h-[46px] px-5 py-2.5 text-sm flex items-center justify-center gap-2 disabled:opacity-50 ${PRIMARY_CTA_CLASS}`}
                     >
                       <Plus className="h-4 w-4" />
                       <span>Simpan Laporan Setoran</span>
@@ -2624,8 +3005,8 @@ export function GuruDashboard({
                       aria-label="Filter kelas setoran tahfidz"
                       className="min-h-[38px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-xs font-medium text-slate-900 dark:text-slate-100"
                     >
-                      <option value="ALL">Semua Kelas XI & XII</option>
-                      {[...GRADE_CLASSES.XI, ...GRADE_CLASSES.XII].map((cls) => (
+                      <option value="ALL">Semua Kelas Ampu ({tahfidzAvailableClasses.length})</option>
+                      {tahfidzAvailableClasses.map((cls) => (
                         <option key={cls} value={cls}>
                           {cls}
                         </option>
@@ -2723,12 +3104,198 @@ export function GuruDashboard({
                   </div>
                 )}
               </div>
+              </div>
+
+              {/* Daftar Penugasan & Materi Tahfidz/Tahsin (Khusus Kelompok Jilid / Tahfidz) */}
+              {(() => {
+                const tahfidzItems = learningItems.filter(
+                  (i) => i.mapel === 'Tahfidz/Tahsin'
+                );
+                return (
+                  <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                          Tugas &amp; Materi Tahfidz/Tahsin (Filter Kelompok Jilid / Tahfidz)
+                        </h3>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                          Tugas bertanda <span className="font-semibold text-amber-600 dark:text-amber-400">Khusus Jilid</span> hanya tampil untuk siswa kelompok Jilid dan tidak dihitung menunggak bagi siswa Tahfidz.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openCreateItemModal('Tahfidz/Tahsin', 'tugas')}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-800 dark:text-teal-300 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shrink-0"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Tambah Tugas Tahfidz/Jilid</span>
+                      </button>
+                    </div>
+                    {tahfidzItems.length === 0 ? (
+                      <div className="p-8 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                        Belum ada materi atau tugas khusus Tahfidz/Tahsin. Klik tombol &ldquo;Tambah Tugas Tahfidz/Jilid&rdquo; untuk membuat tugas menulis bagi kelompok Jilid.
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {tahfidzItems.map((item) => {
+                          const isOfflineJilid = isJilidOfflineTask(item);
+                          const targetJilidStudents = isOfflineJilid
+                            ? students.filter((st) =>
+                                isItemForStudent(
+                                  item,
+                                  st,
+                                  tahfidzRecords,
+                                  tahfidzTaughtClasses
+                                )
+                              )
+                            : [];
+                          const checkedJilidCount = isOfflineJilid
+                            ? targetJilidStudents.filter((st) =>
+                                submissions.some(
+                                  (sub) =>
+                                    sub.itemId === item.id &&
+                                    sub.studentNis === st.nis &&
+                                    sub.status === 'Selesai'
+                                )
+                              ).length
+                            : 0;
+                          const eligibleGradeClasses = GRADE_CLASSES[item.tingkat].filter(
+                            (cls) => tahfidzAvailableClasses.includes(cls)
+                          );
+                          const defaultChecklistClass: ClassName =
+                            item.targetKelas !== 'ALL'
+                              ? item.targetKelas
+                              : eligibleGradeClasses[0] ||
+                                GRADE_CLASSES[item.tingkat][0];
+
+                          return (
+                          <div
+                            key={item.id}
+                            className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                          >
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 font-semibold">
+                                  {item.type === 'materi' ? 'Materi' : 'Tugas'} · Tingkat {item.tingkat}
+                                </span>
+                                {item.type === 'tugas' && item.targetPeserta && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full font-semibold ${
+                                      item.targetPeserta === 'Jilid'
+                                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                        : item.targetPeserta === 'Tahfidz'
+                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    Target: {item.targetPeserta === 'Semua' ? 'Semua Siswa XI & XII' : `Khusus ${item.targetPeserta}`}
+                                  </span>
+                                )}
+                                {isOfflineJilid && (
+                                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-semibold">
+                                    Kumpul Buku Tulis (Ceklis Guru) · {checkedJilidCount}/{targetJilidStudents.length} selesai
+                                  </span>
+                                )}
+                                {item.tenggat && (
+                                  <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                                    Tenggat: {item.tenggat}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                                {item.judul}
+                              </p>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
+                                {item.deskripsi}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {item.type === 'tugas' && onSaveJilidSubmissionChecklist && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setJilidChecklistModal({
+                                      item,
+                                      selectedClass: defaultChecklistClass,
+                                    })
+                                  }
+                                  className="min-h-[38px] px-4 py-1.5 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md shadow-teal-500/30 transition-all"
+                                >
+                                  <ClipboardCheck className="h-4 w-4" />
+                                  <span>Ceklis &amp; Nilai Siswa</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => openEditItemModal(item)}
+                                className="min-h-[36px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1.5"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await onDeleteLearningItem(item.id);
+                                  showToast(`"${item.judul}" berhasil dihapus.`);
+                                }}
+                                aria-label={`Hapus ${item.judul}`}
+                                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-700 dark:hover:text-rose-400"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {/* TAB 5: LAPORAN */}
           {activeTab === 'laporan' && (
             <div className="space-y-5">
+              {/* Sub-tab Switcher: Tracking Materi/Tugas vs Laporan Harian Tahfidz */}
+              <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-2 shadow-sm inline-grid grid-cols-2 gap-1.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setLaporanSubTab('tracking')}
+                  className={`min-h-[40px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                    laporanSubTab === 'tracking'
+                      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-500/25'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Tracking Baca Materi &amp; Tugas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLaporanSubTab('harian_tahfidz')}
+                  className={`min-h-[40px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                    laporanSubTab === 'harian_tahfidz'
+                      ? 'bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-md shadow-teal-500/25'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  Laporan Harian Tahfidz
+                </button>
+              </div>
+
+              {laporanSubTab === 'harian_tahfidz' ? (
+                <LaporanHarianTahfidzView
+                  students={students}
+                  tahfidzRecords={tahfidzRecords}
+                  tahfidzClasses={tahfidzAvailableClasses}
+                  onOpenManageClasses={
+                    onSaveTahfidzTaughtClasses ? openTahfidzClassesModal : undefined
+                  }
+                />
+              ) : (
+                <>
               {/* Filter Bar per Kelas */}
               <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -2817,6 +3384,23 @@ export function GuruDashboard({
                 </div>
               </div>
 
+              {/* Panel Ceklis & Penilaian Huruf Siswa Jilid (hanya kelas ampu XI & XII) */}
+              {onSaveJilidSubmissionChecklist && (
+                <JilidTaskChecklistPanel
+                  selectedClass={reportClassFilter}
+                  onChangeClass={handleReportClassChange}
+                  availableClasses={tahfidzAvailableClasses}
+                  tahfidzTaughtClasses={tahfidzTaughtClasses}
+                  learningItems={learningItems}
+                  students={students}
+                  tahfidzRecords={tahfidzRecords}
+                  submissions={submissions}
+                  onSaveChecklist={onSaveJilidSubmissionChecklist}
+                  onQuickToggleCategory={handleQuickToggleStudentCategory}
+                  onNotify={showToast}
+                />
+              )}
+
               {/* Tracking Table */}
               <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
                 {reportRows.length === 0 ? (
@@ -2846,9 +3430,11 @@ export function GuruDashboard({
                         {reportRows.map(({ student, item, readRecord, submission }) => {
                           const isTimedSubject =
                             item.mapel === 'Bahasa Arab' || item.mapel === 'Aqidah';
+                          const isOfflineJilid = isJilidOfflineTask(item);
                           const hasViolationField =
-                            typeof submission?.violationCount === 'number' ||
-                            (submission?.status === 'Selesai' && isTimedSubject);
+                            !isOfflineJilid &&
+                            (typeof submission?.violationCount === 'number' ||
+                              (submission?.status === 'Selesai' && isTimedSubject));
                           const violations = submission?.violationCount ?? 0;
                           const durationMs =
                             submission?.startedAtMs && submission?.submittedAtMs
@@ -2883,7 +3469,12 @@ export function GuruDashboard({
                                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                                     {item.type === 'materi'
                                       ? 'Materi Bacaan'
+                                      : isOfflineJilid
+                                      ? 'Tugas Buku Tulis (Ceklis Guru)'
                                       : `Tugas${isTimedSubject ? ` (${item.durasiMenit || 30} mnt)` : ''}`}
+                                    {item.targetPeserta && item.targetPeserta !== 'Semua'
+                                      ? ` · Khusus ${item.targetPeserta}`
+                                      : ''}
                                   </p>
                                 </div>
                               </td>
@@ -2916,6 +3507,13 @@ export function GuruDashboard({
                                       ) : (
                                         <StatusBadge variant="belum" />
                                       )}
+
+                                      {submission?.status === 'Selesai' &&
+                                        submission.nilaiHuruf && (
+                                          <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white text-xs font-bold shadow-xs">
+                                            Nilai: {submission.nilaiHuruf}
+                                          </span>
+                                        )}
 
                                       {submission?.status === 'Selesai' &&
                                         typeof submission.finalScore === 'number' && (
@@ -2953,6 +3551,21 @@ export function GuruDashboard({
                                   <span className="font-mono tabular-nums">
                                     {readRecord ? readRecord.readAt : 'Belum dibuka'}
                                   </span>
+                                ) : isOfflineJilid && onSaveJilidSubmissionChecklist ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setJilidChecklistModal({
+                                        item,
+                                        selectedClass: student.kelas,
+                                      })
+                                    }
+                                    className="text-xs font-semibold text-teal-700 dark:text-teal-400 hover:underline"
+                                  >
+                                    {submission?.status === 'Selesai'
+                                      ? 'Edit Ceklis / Nilai'
+                                      : 'Ceklis & Nilai'}
+                                  </button>
                                 ) : submission?.status === 'Selesai' ? (
                                   <div className="inline-flex flex-col items-end gap-0.5">
                                     <button
@@ -2990,7 +3603,21 @@ export function GuruDashboard({
                   </div>
                 )}
               </div>
+                </>
+              )}
             </div>
+          )}
+
+          {/* TAB UJIAN TAHFIDZ & KENAIKAN JUZ OTOMATIS */}
+          {activeTab === 'ujian_tahfidz' && (
+            <UjianKenaikanJuzView
+              students={students}
+              tahfidzRecords={tahfidzRecords}
+              ujianTahfidzList={ujianTahfidzList}
+              onAddUjianTahfidz={onAddUjianTahfidz}
+              onDeleteUjianTahfidz={onDeleteUjianTahfidz}
+              onNotify={showToast}
+            />
           )}
 
           {/* TAB 5: MANAJEMEN BUKU JILID */}
@@ -3041,6 +3668,7 @@ export function GuruDashboard({
         isOpen={isCreateItemModalOpen}
         lockedSubject={modalLockedSubject}
         defaultType={modalDefaultType}
+        tahfidzTaughtClasses={tahfidzAvailableClasses}
         authorName={session.nama}
         editingItem={editingLearningItem}
         editingTugas={
@@ -3166,6 +3794,24 @@ export function GuruDashboard({
                   </select>
                 </div>
 
+                <div>
+                  <label htmlFor="new-student-tahfidz-level" className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
+                    Kelompok &amp; Level Tahfidz / Jilid
+                  </label>
+                  <select
+                    id="new-student-tahfidz-level"
+                    value={newStudentTahfidzLevel}
+                    onChange={(e) => setNewStudentTahfidzLevel(e.target.value)}
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                  >
+                    {TAHFIDZ_LEVEL_OPTIONS.map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl} ({inferCategoryFromLevel(lvl)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {addStudentError && (
                   <div role="alert" className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
                     {addStudentError}
@@ -3188,6 +3834,137 @@ export function GuruDashboard({
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Tahfidz / Jilid Group Modal */}
+      {editingTahfidzStudent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-tahfidz-profile-title"
+        >
+          <div className="w-full max-w-md bg-white dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3
+                    id="edit-tahfidz-profile-title"
+                    className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
+                  >
+                    Atur Kelompok Tahfidz / Jilid
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                    {editingTahfidzStudent.nama} · {editingTahfidzStudent.kelas} (NIS {editingTahfidzStudent.nis})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingTahfidzStudent(null)}
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <span className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
+                    Kelompok Belajar
+                  </span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {(['Jilid', 'Tahfidz'] as TahfidzCategory[]).map((cat) => {
+                      const active = editStudentTahfidzCat === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setEditStudentTahfidzCat(cat);
+                            if (cat === 'Jilid' && !editStudentTahfidzLevel.toLowerCase().includes('jilid')) {
+                              setEditStudentTahfidzLevel('Jilid 1');
+                            } else if (cat === 'Tahfidz' && editStudentTahfidzLevel.toLowerCase().includes('jilid')) {
+                              setEditStudentTahfidzLevel('Juz 30');
+                            }
+                          }}
+                          className={`min-h-[42px] px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                            active
+                              ? 'border-teal-600 bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-sm'
+                              : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="edit-student-tahfidz-level"
+                    className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5"
+                  >
+                    Level / Juz Aktif
+                  </label>
+                  <select
+                    id="edit-student-tahfidz-level"
+                    value={editStudentTahfidzLevel}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditStudentTahfidzLevel(val);
+                      setEditStudentTahfidzCat(inferCategoryFromLevel(val));
+                    }}
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm font-semibold text-slate-900 dark:text-slate-100"
+                  >
+                    {TAHFIDZ_LEVEL_OPTIONS.map((lvl) => (
+                      <option key={lvl} value={lvl}>
+                        {lvl}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTahfidzStudent(null)}
+                    disabled={isSavingTahfidzProfile}
+                    className="min-h-[42px] px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingTahfidzProfile}
+                    onClick={async () => {
+                      setIsSavingTahfidzProfile(true);
+                      try {
+                        await onUpdateStudentTahfidzProfile(
+                          editingTahfidzStudent.nis,
+                          editStudentTahfidzCat,
+                          editStudentTahfidzLevel
+                        );
+                        showToast(
+                          `Kelompok ${editingTahfidzStudent.nama} diperbarui ke ${editStudentTahfidzCat} (${editStudentTahfidzLevel}).`
+                        );
+                        setEditingTahfidzStudent(null);
+                      } catch {
+                        showToast('Gagal memperbarui kelompok siswa.');
+                      } finally {
+                        setIsSavingTahfidzProfile(false);
+                      }
+                    }}
+                    className={`min-h-[42px] px-5 py-2 text-sm disabled:opacity-60 ${PRIMARY_CTA_CLASS}`}
+                  >
+                    {isSavingTahfidzProfile ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3231,6 +4008,176 @@ export function GuruDashboard({
               >
                 Ya, Reset Password
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Student Confirmation Modal */}
+      {deleteConfirmStudent && onDeleteStudent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-student-modal-title"
+        >
+          <div className="w-full max-w-md bg-white dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 shadow-md shadow-rose-500/25 flex items-center justify-center text-white shrink-0">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3
+                  id="delete-student-modal-title"
+                  className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
+                >
+                  Konfirmasi Hapus Siswa
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                  Apakah Anda yakin ingin menghapus siswa{' '}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {deleteConfirmStudent.nama}
+                  </span>{' '}
+                  -{' '}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {deleteConfirmStudent.kelas}
+                  </span>
+                  ? Data yang dihapus tidak dapat dikembalikan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingStudent}
+                onClick={() => setDeleteConfirmStudent(null)}
+                className="min-h-[42px] px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100 transition-colors disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingStudent}
+                onClick={handleConfirmDeleteStudent}
+                className="min-h-[42px] px-5 py-2 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-sm font-semibold shadow-md shadow-rose-500/25 transition-all disabled:opacity-60"
+              >
+                {isDeletingStudent ? 'Menghapus...' : 'Ya, Hapus Siswa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Atur Kelas Ampu Tahfidz Modal */}
+      {isTahfidzClassesModalOpen && onSaveTahfidzTaughtClasses && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="atur-kelas-tahfidz-title"
+        >
+          <div className="w-full max-w-md bg-white dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="h-1.5 w-full bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" />
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3
+                    id="atur-kelas-tahfidz-title"
+                    className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
+                  >
+                    Atur Kelas Ampu Tahfidz
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                    Centang kelas XI &amp; XII yang Anda ampu pada mapel Tahfidz/Tahsin. Secara default XI TKJ &amp; XI AK dikecualikan (guru berbeda), sedangkan Ujian Kenaikan Juz tetap menampilkan semua kelas.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTahfidzClassesModalOpen(false)}
+                  aria-label="Tutup pengaturan kelas ampu Tahfidz"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {TAHFIDZ_ELIGIBLE_CLASSES.map((cls) => {
+                  const checked = draftTahfidzClasses.includes(cls);
+                  const isExcludedDefault = cls === 'XI TKJ' || cls === 'XI AK';
+                  return (
+                    <label
+                      key={cls}
+                      className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border cursor-pointer transition-colors ${
+                        checked
+                          ? 'border-teal-500 bg-teal-50/70 dark:bg-teal-950/35 text-teal-900 dark:text-teal-200'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#0B1120] text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-xs font-bold">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setDraftTahfidzClasses((prev) =>
+                                prev.includes(cls) ? prev : [...prev, cls]
+                              );
+                            } else {
+                              setDraftTahfidzClasses((prev) =>
+                                prev.filter((item) => item !== cls)
+                              );
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        <span>{cls}</span>
+                      </span>
+                      {isExcludedDefault && !checked && (
+                        <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                          Guru lain
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Kelas X hanya mengikuti mapel Aqidah sesuai kurikulum.
+              </p>
+
+              <div className="flex items-center justify-between gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSavingTahfidzClasses}
+                  onClick={() =>
+                    setDraftTahfidzClasses([...DEFAULT_TAHFIDZ_TAUGHT_CLASSES])
+                  }
+                  className="text-xs font-semibold text-teal-700 dark:text-teal-300 hover:underline disabled:opacity-60"
+                >
+                  Reset Default
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSavingTahfidzClasses}
+                    onClick={() => setIsTahfidzClassesModalOpen(false)}
+                    className="min-h-[40px] px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSavingTahfidzClasses}
+                    onClick={handleSaveTahfidzClassesSetting}
+                    className={`min-h-[40px] px-5 py-2 text-xs sm:text-sm disabled:opacity-60 ${PRIMARY_CTA_CLASS}`}
+                  >
+                    {isSavingTahfidzClasses ? 'Menyimpan...' : 'Simpan Pengaturan'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3555,6 +4502,21 @@ export function GuruDashboard({
                       </div>
                     </div>
                   </form>
+                ) : isJilidOfflineTask(subItem) ? (
+                  <div className="p-4 rounded-xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 space-y-2 text-xs">
+                    <p className="font-bold text-teal-900 dark:text-teal-200">
+                      Kumpul Langsung Buku Tulis (Ceklis Guru)
+                    </p>
+                    <p className="text-slate-700 dark:text-slate-300">
+                      Status: <span className="font-bold">{subRecord.status === 'Selesai' ? 'Sudah Dikumpulkan' : 'Belum'}</span>
+                      {subRecord.nilaiHuruf ? ` · Nilai Huruf: ${subRecord.nilaiHuruf}` : ''}
+                    </p>
+                    {subRecord.catatanGuru && (
+                      <p className="text-slate-700 dark:text-slate-300 whitespace-pre-line">
+                        Catatan Guru: {subRecord.catatanGuru}
+                      </p>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">Catatan / Jawaban Siswa</p>
@@ -4633,6 +5595,69 @@ export function GuruDashboard({
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Ceklis & Nilai Huruf Siswa Jilid */}
+      {jilidChecklistModal && onSaveJilidSubmissionChecklist && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="jilid-checklist-modal-title"
+        >
+          <div className="w-full max-w-4xl my-auto bg-white dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-teal-700 dark:text-teal-300">
+                  Tahfidz/Tahsin · Ceklis &amp; Nilai Siswa
+                </p>
+                <h3
+                  id="jilid-checklist-modal-title"
+                  className="font-display text-base font-bold text-slate-900 dark:text-slate-100 truncate"
+                >
+                  {jilidChecklistModal.item.judul}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setJilidChecklistModal(null)}
+                aria-label="Tutup panel ceklis siswa Jilid"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 sm:p-5 overflow-y-auto">
+              <JilidTaskChecklistPanel
+                selectedClass={jilidChecklistModal.selectedClass}
+                onChangeClass={(nextClass) =>
+                  setJilidChecklistModal((prev) =>
+                    prev ? { ...prev, selectedClass: nextClass } : null
+                  )
+                }
+                availableClasses={(() => {
+                  if (jilidChecklistModal.item.targetKelas !== 'ALL') {
+                    return [jilidChecklistModal.item.targetKelas];
+                  }
+                  const filtered = GRADE_CLASSES[jilidChecklistModal.item.tingkat].filter(
+                    (cls) => tahfidzAvailableClasses.includes(cls)
+                  );
+                  return filtered.length > 0
+                    ? filtered
+                    : GRADE_CLASSES[jilidChecklistModal.item.tingkat];
+                })()}
+                tahfidzTaughtClasses={tahfidzTaughtClasses}
+                learningItems={learningItems}
+                initialItemId={jilidChecklistModal.item.id}
+                students={students}
+                tahfidzRecords={tahfidzRecords}
+                submissions={submissions}
+                onSaveChecklist={onSaveJilidSubmissionChecklist}
+                onQuickToggleCategory={handleQuickToggleStudentCategory}
+                onNotify={showToast}
+              />
             </div>
           </div>
         </div>

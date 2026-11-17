@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  Award,
   BookOpen,
   CalendarClock,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  GraduationCap,
   Home,
   KeyRound,
   Languages,
@@ -24,17 +26,20 @@ import {
   Send,
   Settings,
   ShieldAlert,
+  Sparkles,
   Sun,
   Trophy,
   X,
 } from 'lucide-react';
 import {
+  DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   SUBJECT_META,
   getSubjectsForClass,
   isItemForStudent,
 } from '../../data/mockData';
 import {
   AssignmentSubmission,
+  ClassName,
   JadwalMapelItem,
   JilidBook,
   JilidReadProgress,
@@ -48,8 +53,13 @@ import {
   SubjectName,
   TahfidzRecord,
   TugasDocument,
+  UjianTahfidzRecord,
 } from '../../types/lms';
 import { buildSiswaClassLeaderboard } from '../../lib/classProgress';
+import {
+  getStudentTahfidzProfile,
+  isJilidOfflineTask,
+} from '../../lib/tahfidzUtils';
 import {
   DailyMahfudzotCard,
   MiniMonthlyCalendar,
@@ -108,11 +118,13 @@ interface SiswaDashboardProps {
   readRecords: MaterialReadRecord[];
   submissions: AssignmentSubmission[];
   tahfidzRecords: TahfidzRecord[];
+  ujianTahfidzList?: UjianTahfidzRecord[];
   jilidBooks: JilidBook[];
   jilidProgress: JilidReadProgress[];
   jadwalMapel: JadwalMapelItem[];
   statistikKelas?: StatistikKelasItem[];
   pengumumanList?: PengumumanItem[];
+  tahfidzTaughtClasses?: ClassName[];
   notifications: NotifikasiItem[];
   notificationReads: NotifikasiReadRecord[];
   isDark?: boolean;
@@ -139,11 +151,13 @@ export function SiswaDashboard({
   readRecords,
   submissions,
   tahfidzRecords,
+  ujianTahfidzList = [],
   jilidBooks,
   jilidProgress,
   jadwalMapel,
   statistikKelas = [],
   pengumumanList = [],
+  tahfidzTaughtClasses = DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   notifications,
   notificationReads,
   isDark = false,
@@ -162,6 +176,17 @@ export function SiswaDashboard({
   const allowedSubjects = useMemo(
     () => getSubjectsForClass(student.kelas),
     [student.kelas]
+  );
+  const isClassTaughtTahfidzByGuru = useMemo(
+    () => tahfidzTaughtClasses.includes(student.kelas),
+    [tahfidzTaughtClasses, student.kelas]
+  );
+  const visibleSubjects = useMemo(
+    () =>
+      allowedSubjects.filter(
+        (sub) => sub !== 'Tahfidz/Tahsin' || isClassTaughtTahfidzByGuru
+      ),
+    [allowedSubjects, isClassTaughtTahfidzByGuru]
   );
 
   const [activeTab, setActiveTab] = useState<SiswaTab>('beranda');
@@ -229,10 +254,31 @@ export function SiswaDashboard({
     closeMobileDrawer();
   };
 
-  // Filter items strictly to student's class & allowed subjects
+  const studentTahfidzRecords = useMemo(() => {
+    return tahfidzRecords.filter((r) => r.studentNis === student.nis);
+  }, [tahfidzRecords, student.nis]);
+
+  const studentTahfidzProfile = useMemo(
+    () => getStudentTahfidzProfile(student, studentTahfidzRecords),
+    [student, studentTahfidzRecords]
+  );
+
+  const studentUjianTahfidz = useMemo(
+    () => ujianTahfidzList.filter((u) => u.studentNis === student.nis),
+    [ujianTahfidzList, student.nis]
+  );
+
+  // Filter items strictly to student's class, allowed subjects, guru's Tahfidz taught classes & Jilid/Tahfidz group
   const studentItems = useMemo(() => {
-    return learningItems.filter((item) => isItemForStudent(item, student));
-  }, [learningItems, student]);
+    return learningItems.filter((item) =>
+      isItemForStudent(
+        item,
+        student,
+        studentTahfidzRecords,
+        tahfidzTaughtClasses
+      )
+    );
+  }, [learningItems, student, studentTahfidzRecords, tahfidzTaughtClasses]);
 
   const visibleItems = useMemo(() => {
     if (selectedSubject === 'ALL') return studentItems;
@@ -242,10 +288,6 @@ export function SiswaDashboard({
   const materials = visibleItems.filter((i) => i.type === 'materi');
   const assignments = visibleItems.filter((i) => i.type === 'tugas');
 
-  const studentTahfidzRecords = useMemo(() => {
-    return tahfidzRecords.filter((r) => r.studentNis === student.nis);
-  }, [tahfidzRecords, student.nis]);
-
   const studentPengumuman = useMemo(() => {
     return pengumumanList.filter(
       (p) => p.targetTingkat === 'Semua' || p.targetTingkat === student.tingkat
@@ -253,6 +295,7 @@ export function SiswaDashboard({
   }, [pengumumanList, student.tingkat]);
 
   const showTahfidzHistory =
+    isClassTaughtTahfidzByGuru &&
     allowedSubjects.includes('Tahfidz/Tahsin') &&
     (selectedSubject === 'ALL' || selectedSubject === 'Tahfidz/Tahsin');
 
@@ -287,6 +330,63 @@ export function SiswaDashboard({
         )
     );
   }, [studentItems, submissions, student.nis]);
+
+  const pendingJilidTasks = useMemo(() => {
+    if (!isClassTaughtTahfidzByGuru) return [];
+    return activeIncompleteTasks.filter((item) => isJilidOfflineTask(item));
+  }, [activeIncompleteTasks, isClassTaughtTahfidzByGuru]);
+
+  const renderPersistentJilidWarning = () => {
+    if (pendingJilidTasks.length === 0) return null;
+    return (
+      <div
+        role="region"
+        aria-label="Pengingat Tugas Khusus Jilid"
+        className="rounded-2xl border-2 border-amber-400/90 dark:border-rose-500/70 bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 dark:from-amber-950/55 dark:via-rose-950/45 dark:to-amber-950/55 p-4 sm:p-5 shadow-md shadow-amber-500/10 space-y-3"
+      >
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 shadow-md shadow-rose-500/25 flex items-center justify-center text-white shrink-0">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <p className="font-display text-sm sm:text-base font-bold text-rose-950 dark:text-amber-100">
+              Pengingat Tugas Khusus Jilid ({pendingJilidTasks.length} Belum Diceklis Guru)
+            </p>
+            <p className="text-xs sm:text-sm text-amber-950/90 dark:text-amber-200/90 leading-relaxed">
+              Kerjakan di buku tulis, lalu serahkan langsung kepada guru untuk diceklis dan dinilai. Pemberitahuan ini akan tetap tampil sampai guru menceklis tugas Anda.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {pendingJilidTasks.map((task) => (
+            <div
+              key={task.id}
+              className="p-3 rounded-xl bg-white/85 dark:bg-[#0B1120]/85 border border-amber-300/80 dark:border-rose-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+            >
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {task.judul}
+                </p>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                  Kumpul Langsung Buku Tulis (Ceklis Guru)
+                  {task.tenggat ? ` · Tenggat ${task.tenggat}` : ' · Tanpa batas durasi waktu'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openTaskModal(task)}
+                className="min-h-[36px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 shadow-sm shrink-0"
+              >
+                <span>Lihat Tugas</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const classLeaderboard = useMemo(
     () => buildSiswaClassLeaderboard(statistikKelas),
@@ -1080,21 +1180,31 @@ export function SiswaDashboard({
           {/* TAB 1: BERANDA SISWA */}
           {activeTab === 'beranda' && (
             <div className="space-y-6">
+              {renderPersistentJilidWarning()}
+
               {/* Student Welcome & Stats Banner */}
               <div
                 className={`${ELECTRIC_BANNER_CLASS} rounded-2xl p-5 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5`}
               >
                 <div className="space-y-1.5">
-                  <p className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold text-white">
-                    Kelas {student.kelas} · Tingkat {student.tingkat}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-white/20 text-[11px] font-semibold text-white">
+                      Kelas {student.kelas} · Tingkat {student.tingkat}
+                    </p>
+                    <p className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-400/25 border border-emerald-200/30 text-[11px] font-semibold text-white">
+                      <Award className="h-3 w-3 shrink-0" />
+                      <span>
+                        {studentTahfidzProfile.category} · {studentTahfidzProfile.level}
+                      </span>
+                    </p>
+                  </div>
                   <h2 className="font-display text-xl sm:text-2xl font-bold text-white">
                     Assalamu’alaikum, {student.nama}
                   </h2>
                   <p className="text-xs sm:text-sm text-indigo-100">
                     Mata pelajaran yang tersedia untuk kelas Anda:{' '}
                     <span className="font-semibold text-white">
-                      {allowedSubjects.join(' dan ')}
+                      {visibleSubjects.join(' dan ')}
                     </span>
                     .
                   </p>
@@ -1164,6 +1274,7 @@ export function SiswaDashboard({
                         {activeIncompleteTasks.slice(0, 5).map((item) => {
                           const isTimedSubject =
                             item.mapel === 'Bahasa Arab' || item.mapel === 'Aqidah';
+                          const isOfflineJilid = isJilidOfflineTask(item);
                           const theme = getSubjectTheme(item.mapel);
                           return (
                             <button
@@ -1178,11 +1289,18 @@ export function SiswaDashboard({
                                     {item.mapel}
                                   </span>
                                   <span aria-hidden="true">·</span>
-                                  <span className="font-mono tabular-nums">
-                                    {item.tenggat
-                                      ? `Tenggat ${item.tenggat}`
-                                      : 'Tanpa tenggat'}
-                                  </span>
+                                  {isOfflineJilid ? (
+                                    <span className="font-semibold text-teal-700 dark:text-teal-300">
+                                      Kumpul Buku Tulis (Ceklis Guru)
+                                      {item.tenggat ? ` · Tenggat ${item.tenggat}` : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="font-mono tabular-nums">
+                                      {item.tenggat
+                                        ? `Tenggat ${item.tenggat}`
+                                        : 'Tanpa tenggat'}
+                                    </span>
+                                  )}
                                   {isTimedSubject && (
                                     <>
                                       <span aria-hidden="true">·</span>
@@ -1197,7 +1315,7 @@ export function SiswaDashboard({
                                 </p>
                               </div>
                               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-semibold shadow-sm shadow-amber-500/25 shrink-0">
-                                <span>Kerjakan</span>
+                                <span>{isOfflineJilid ? 'Lihat Tugas' : 'Kerjakan'}</span>
                                 <ArrowRight className="h-3.5 w-3.5" />
                               </span>
                             </button>
@@ -1417,9 +1535,9 @@ export function SiswaDashboard({
           {/* TAB 2: MAPEL SAYA */}
           {activeTab === 'mapel' && (
             <div className="space-y-6">
-              {/* Subject Filter Bar (strictly shows only allowedSubjects) */}
+              {/* Subject Filter Bar (strictly shows only visibleSubjects) */}
               <div className="flex flex-wrap items-center gap-2">
-                {allowedSubjects.length > 1 && (
+                {visibleSubjects.length > 1 && (
                   <button
                     type="button"
                     onClick={() => setSelectedSubject('ALL')}
@@ -1429,13 +1547,13 @@ export function SiswaDashboard({
                         : 'bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Semua Mapel ({allowedSubjects.length})
+                    Semua Mapel ({visibleSubjects.length})
                   </button>
                 )}
 
-                {allowedSubjects.map((sub) => {
+                {visibleSubjects.map((sub) => {
                   const active =
-                    allowedSubjects.length === 1 || selectedSubject === sub;
+                    visibleSubjects.length === 1 || selectedSubject === sub;
                   const subTheme = getSubjectTheme(sub);
                   return (
                     <button
@@ -1454,13 +1572,15 @@ export function SiswaDashboard({
                 })}
               </div>
 
+              {showTahfidzHistory && renderPersistentJilidWarning()}
+
               {/* Subject Description Cards */}
               <div
                 className={`grid gap-4 ${
-                  allowedSubjects.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
+                  visibleSubjects.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
                 }`}
               >
-                {allowedSubjects
+                {visibleSubjects
                   .filter((sub) => selectedSubject === 'ALL' || selectedSubject === sub)
                   .map((sub) => {
                     const meta = SUBJECT_META[sub];
@@ -1524,6 +1644,7 @@ export function SiswaDashboard({
                       const soalCount = matchedTugas?.soalList.length ?? item.soalCount ?? 0;
                       const totalPoin = matchedTugas?.totalPoin ?? item.totalPoin ?? 0;
                       const isDone = sub?.status === 'Selesai';
+                      const isOfflineJilid = isJilidOfflineTask(item);
                       const itemTheme = getSubjectTheme(item.mapel);
                       return (
                         <div
@@ -1533,11 +1654,30 @@ export function SiswaDashboard({
                           <div className={`h-1.5 ${itemTheme.gradientBar}`} />
                           <div className="p-5 flex-1 flex flex-col justify-between gap-4">
                             <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`text-xs font-semibold ${itemTheme.accentText}`}>
-                                  {item.mapel}
-                                </span>
-                                <StatusBadge variant={isDone ? 'selesai' : 'belum'} />
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span className={`text-xs font-semibold ${itemTheme.accentText}`}>
+                                    {item.mapel}
+                                  </span>
+                                  {item.targetPeserta && item.targetPeserta !== 'Semua' && (
+                                    <span className="px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 text-[10px] font-semibold">
+                                      Khusus {item.targetPeserta}
+                                    </span>
+                                  )}
+                                  {isOfflineJilid && (
+                                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300 text-[10px] font-semibold">
+                                      Kumpul Buku Tulis
+                                    </span>
+                                  )}
+                                </div>
+                                {isDone && isOfflineJilid ? (
+                                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm shadow-teal-500/25 whitespace-nowrap">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                                    <span>Sudah Dikumpulkan</span>
+                                  </span>
+                                ) : (
+                                  <StatusBadge variant={isDone ? 'selesai' : 'belum'} />
+                                )}
                               </div>
                               <h4 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
                                 {item.judul}
@@ -1547,6 +1687,20 @@ export function SiswaDashboard({
                                   ? stripHtmlTags(item.deskripsi)
                                   : item.deskripsi}
                               </p>
+                              {isDone && isOfflineJilid && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                  {sub?.nilaiHuruf && (
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold shadow-sm shadow-emerald-500/20">
+                                      Nilai: {sub.nilaiHuruf}
+                                    </span>
+                                  )}
+                                  {sub?.catatanGuru && (
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                                      Catatan: {sub.catatanGuru}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                               {isDone && sub?.gradingStatus === 'waiting_essay' && (
                                 <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">
                                   Menunggu Koreksi Essay
@@ -1555,6 +1709,7 @@ export function SiswaDashboard({
                                 </p>
                               )}
                               {isDone &&
+                                !isOfflineJilid &&
                                 sub?.gradingStatus === 'graded' &&
                                 typeof sub.finalScore === 'number' && (
                                   <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
@@ -1565,7 +1720,18 @@ export function SiswaDashboard({
 
                             <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3">
                               <div className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums space-y-0.5">
-                                <p>{item.tenggat ? `Tenggat: ${item.tenggat}` : 'Tanpa tenggat'}</p>
+                                {isOfflineJilid ? (
+                                  <>
+                                    <p className="font-sans font-semibold text-teal-700 dark:text-teal-300">
+                                      Ceklis Guru (Buku Tulis)
+                                    </p>
+                                    <p>
+                                      {item.tenggat ? `Tenggat: ${item.tenggat}` : 'Tanpa batas waktu'}
+                                    </p>
+                                  </>
+                                ) : (
+                                  <p>{item.tenggat ? `Tenggat: ${item.tenggat}` : 'Tanpa tenggat'}</p>
+                                )}
                                 {(item.mapel === 'Bahasa Arab' || item.mapel === 'Aqidah') && (
                                   <p className={`${itemTheme.accentText} font-semibold flex items-center gap-1`}>
                                     <Clock className="h-3 w-3 shrink-0" />
@@ -1586,7 +1752,15 @@ export function SiswaDashboard({
                                 }`}
                               >
                                 <ClipboardCheck className="h-4 w-4" />
-                                <span>{isDone ? 'Lihat Jawaban' : 'Kerjakan Tugas'}</span>
+                                <span>
+                                  {isDone
+                                    ? isOfflineJilid
+                                      ? 'Lihat Detail & Nilai'
+                                      : 'Lihat Jawaban'
+                                    : isOfflineJilid
+                                    ? 'Lihat Tugas'
+                                    : 'Kerjakan Tugas'}
+                                </span>
                               </button>
                             </div>
                           </div>
@@ -1689,6 +1863,99 @@ export function SiswaDashboard({
                 </section>
               )}
 
+              {/* Section: Riwayat Ujian Tahfidz & Kenaikan Juz */}
+              {(showTahfidzHistory || studentUjianTahfidz.length > 0) && (
+                <section aria-labelledby="heading-riwayat-ujian-tahfidz" className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h3
+                        id="heading-riwayat-ujian-tahfidz"
+                        className="font-display text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2"
+                      >
+                        <GraduationCap className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>Riwayat Ujian Tahfidz &amp; Kenaikan Juz</span>
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        Level aktif saat ini:{' '}
+                        <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                          {studentTahfidzProfile.category} ({studentTahfidzProfile.level})
+                        </span>
+                      </p>
+                    </div>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                      {studentUjianTahfidz.length} riwayat ujian
+                    </span>
+                  </div>
+
+                  {studentUjianTahfidz.length === 0 ? (
+                    <div className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      Belum ada riwayat ujian kenaikan Juz / Jilid.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {studentUjianTahfidz.map((ex) => (
+                        <div
+                          key={ex.id}
+                          className="bg-white dark:bg-[#131C31] border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm"
+                        >
+                          <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+                          <div className="p-5 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 tabular-nums">
+                                  {ex.tanggalUjian}
+                                </p>
+                                <h4 className="font-display text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                                  Ujian {ex.levelDiujikan}
+                                </h4>
+                              </div>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                                  ex.status === 'Lulus'
+                                    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                                }`}
+                              >
+                                {ex.status}
+                              </span>
+                            </div>
+
+                            {ex.status === 'Lulus' && ex.naikKeLevel && (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                <span>Naik Level ke {ex.naikKeLevel}</span>
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800 text-xs">
+                              <div>
+                                <p className="text-slate-500 dark:text-slate-400">Nilai Ujian</p>
+                                <p className="mt-0.5 font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                                  {ex.nilai}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-slate-500 dark:text-slate-400">Penguji</p>
+                                <p className="mt-0.5 font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                  {ex.penguji}
+                                </p>
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                Catatan Penguji:{' '}
+                              </span>
+                              {ex.catatan}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
               {/* Section: Materi Pembelajaran */}
               <section aria-labelledby="heading-materi" className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1781,6 +2048,12 @@ export function SiswaDashboard({
                       <span className="text-slate-600 dark:text-slate-400">Mapel Aktif</span>
                       <span className="font-semibold text-teal-600 dark:text-teal-400 text-right">
                         {allowedSubjects.join(', ')}
+                      </span>
+                    </div>
+                    <div className="py-3 flex items-center justify-between gap-4">
+                      <span className="text-slate-600 dark:text-slate-400">Level Tahfidz / Jilid</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-right">
+                        {studentTahfidzProfile.category} · {studentTahfidzProfile.level}
                       </span>
                     </div>
                   </div>
@@ -2187,63 +2460,102 @@ export function SiswaDashboard({
               </button>
             </div>
 
-            <form onSubmit={handleTaskSubmit} className="p-6 overflow-y-auto space-y-4">
-              <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800">
-                {taskItem.mapel === 'Bahasa Arab' || taskItem.mapel === 'Aqidah' ? (
-                  <MaterialContentRenderer content={taskItem.konten} />
-                ) : (
+            {isJilidOfflineTask(taskItem) ? (
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-full bg-teal-500/15 text-teal-800 dark:text-teal-300 font-semibold">
+                    Kumpul Langsung Buku Tulis (Ceklis Guru)
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                    {taskItem.tenggat ? `Tenggat: ${taskItem.tenggat}` : 'Tanpa batas durasi waktu'}
+                  </span>
+                </div>
+
+                <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800">
                   <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
                     {taskItem.konten}
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div>
-                <label htmlFor="task-answer" className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
-                  Jawaban / Catatan Pengumpulan Tugas
-                </label>
-                <textarea
-                  id="task-answer"
-                  rows={4}
-                  required
-                  value={taskAnswer}
-                  onChange={(e) => setTaskAnswer(e.target.value)}
-                  placeholder="Tuliskan ringkasan jawaban atau konfirmasi setoran hafalan Anda di sini..."
-                  className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500"
-                />
-              </div>
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/45 border-2 border-amber-300 dark:border-amber-700/70 space-y-1.5">
+                  <p className="text-xs sm:text-sm font-bold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Petunjuk Pengumpulan</span>
+                  </p>
+                  <p className="text-xs sm:text-sm text-amber-950/90 dark:text-amber-200 leading-relaxed">
+                    Kerjakan di buku tulis, lalu serahkan langsung kepada guru untuk diceklis dan dinilai.
+                  </p>
+                </div>
 
-              <div>
-                <label htmlFor="task-file" className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
-                  Nama File Lampiran (Opsional - Simulasi)
-                </label>
-                <input
-                  id="task-file"
-                  type="text"
-                  value={taskFileName}
-                  onChange={(e) => setTaskFileName(e.target.value)}
-                  placeholder="Contoh: Tugas_Aqidah_NamaSiswa.pdf"
-                  className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500"
-                />
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setTaskItem(null)}
+                    className={`min-h-[42px] px-5 py-2 text-sm ${PRIMARY_CTA_CLASS}`}
+                  >
+                    Tutup
+                  </button>
+                </div>
               </div>
+            ) : (
+              <form onSubmit={handleTaskSubmit} className="p-6 overflow-y-auto space-y-4">
+                <div className="p-4 sm:p-5 rounded-xl bg-slate-50 dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800">
+                  {taskItem.mapel === 'Bahasa Arab' || taskItem.mapel === 'Aqidah' ? (
+                    <MaterialContentRenderer content={taskItem.konten} />
+                  ) : (
+                    <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+                      {taskItem.konten}
+                    </div>
+                  )}
+                </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setTaskItem(null)}
-                  className="min-h-[42px] px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100 transition-colors"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className={`min-h-[42px] px-5 py-2 text-sm flex items-center gap-2 ${PRIMARY_CTA_CLASS}`}
-                >
-                  <Send className="h-4 w-4" />
-                  <span>Kumpulkan Tugas</span>
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label htmlFor="task-answer" className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
+                    Jawaban / Catatan Pengumpulan Tugas
+                  </label>
+                  <textarea
+                    id="task-answer"
+                    rows={4}
+                    required
+                    value={taskAnswer}
+                    onChange={(e) => setTaskAnswer(e.target.value)}
+                    placeholder="Tuliskan ringkasan jawaban atau konfirmasi setoran hafalan Anda di sini..."
+                    className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="task-file" className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5">
+                    Nama File Lampiran (Opsional - Simulasi)
+                  </label>
+                  <input
+                    id="task-file"
+                    type="text"
+                    value={taskFileName}
+                    onChange={(e) => setTaskFileName(e.target.value)}
+                    placeholder="Contoh: Tugas_Aqidah_NamaSiswa.pdf"
+                    className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/25 focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTaskItem(null)}
+                    className="min-h-[42px] px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold text-slate-900 dark:text-slate-100 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className={`min-h-[42px] px-5 py-2 text-sm flex items-center gap-2 ${PRIMARY_CTA_CLASS}`}
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>Kumpulkan Tugas</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -2348,7 +2660,14 @@ export function SiswaDashboard({
                     {completedTaskModal.item.mapel}
                   </span>
                   <span aria-hidden="true">·</span>
-                  <StatusBadge variant="selesai" />
+                  {isJilidOfflineTask(completedTaskModal.item) ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 px-2.5 py-1 text-xs font-semibold text-white">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-white shrink-0" />
+                      <span>Sudah Dikumpulkan</span>
+                    </span>
+                  ) : (
+                    <StatusBadge variant="selesai" />
+                  )}
                 </div>
                 <h3
                   id="completed-task-title"
@@ -2370,21 +2689,53 @@ export function SiswaDashboard({
             <div className="p-6 overflow-y-auto space-y-4">
               <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0B1120] border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400">
                 <span className="font-mono tabular-nums">
-                  Dikumpulkan: {completedTaskModal.submission.submittedAt || '-'}
+                  {isJilidOfflineTask(completedTaskModal.item)
+                    ? `Diceklis Guru: ${
+                        completedTaskModal.submission.checkedAt ||
+                        completedTaskModal.submission.submittedAt ||
+                        '-'
+                      }`
+                    : `Dikumpulkan: ${completedTaskModal.submission.submittedAt || '-'}`}
                 </span>
-                {typeof completedTaskModal.submission.violationCount === 'number' && (
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border font-mono font-semibold ${
-                      completedTaskModal.submission.violationCount > 0
-                        ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
-                        : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                    }`}
-                  >
-                    <ShieldAlert className="h-3 w-3" />
-                    <span>{completedTaskModal.submission.violationCount}x pindah layar</span>
-                  </span>
-                )}
+                {!isJilidOfflineTask(completedTaskModal.item) &&
+                  typeof completedTaskModal.submission.violationCount === 'number' && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border font-mono font-semibold ${
+                        completedTaskModal.submission.violationCount > 0
+                          ? 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                          : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                      }`}
+                    >
+                      <ShieldAlert className="h-3 w-3" />
+                      <span>{completedTaskModal.submission.violationCount}x pindah layar</span>
+                    </span>
+                  )}
               </div>
+
+              {isJilidOfflineTask(completedTaskModal.item) && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200 space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-bold">
+                      Status: Sudah Dikumpulkan (Buku Tulis)
+                    </span>
+                    {completedTaskModal.submission.nilaiHuruf && (
+                      <span className="px-3 py-1 rounded-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-display text-sm font-bold shadow-xs">
+                        Nilai: {completedTaskModal.submission.nilaiHuruf}
+                      </span>
+                    )}
+                  </div>
+                  {completedTaskModal.submission.gradedBy && (
+                    <p className="text-xs opacity-90">
+                      Dinilai oleh: {completedTaskModal.submission.gradedBy}
+                    </p>
+                  )}
+                  {completedTaskModal.submission.catatanGuru && (
+                    <p className="text-xs leading-relaxed pt-1 whitespace-pre-line">
+                      Catatan Guru: {completedTaskModal.submission.catatanGuru}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Score Summary Banner */}
               {completedTaskModal.submission.gradingStatus === 'waiting_essay' && (
@@ -2398,7 +2749,8 @@ export function SiswaDashboard({
                 </div>
               )}
 
-              {completedTaskModal.submission.gradingStatus === 'graded' &&
+              {!isJilidOfflineTask(completedTaskModal.item) &&
+                completedTaskModal.submission.gradingStatus === 'graded' &&
                 typeof completedTaskModal.submission.finalScore === 'number' && (
                   <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs sm:text-sm text-emerald-900 dark:text-emerald-200 space-y-1">
                     <div className="flex items-center justify-between gap-2">
@@ -2426,104 +2778,105 @@ export function SiswaDashboard({
                 )}
               </div>
 
-              {(() => {
-                const matchedTugas = tugasList.find(
-                  (t) => t.itemId === completedTaskModal.item.id
-                );
-                const structAns = completedTaskModal.submission.structuredAnswers;
-                const itemScores = completedTaskModal.submission.itemScores;
+              {!isJilidOfflineTask(completedTaskModal.item) &&
+                (() => {
+                  const matchedTugas = tugasList.find(
+                    (t) => t.itemId === completedTaskModal.item.id
+                  );
+                  const structAns = completedTaskModal.submission.structuredAnswers;
+                  const itemScores = completedTaskModal.submission.itemScores;
 
-                if (matchedTugas && structAns) {
-                  return (
-                    <div className="space-y-3">
-                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        Rincian Jawaban Terkumpul (Terkunci)
-                      </p>
-                      {matchedTugas.soalList.map((soal, idx) => {
-                        const ans = structAns[soal.id];
-                        const score = itemScores?.[soal.id];
-                        return (
-                          <div
-                            key={soal.id}
-                            className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1120] space-y-2"
-                          >
-                            <div className="flex items-center justify-between gap-2 text-xs font-mono">
-                              <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                                Soal #{idx + 1}
-                              </span>
-                              {typeof score === 'number' ? (
-                                <span className="font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
-                                  {soal.type === 'essay' &&
-                                  completedTaskModal.submission.gradingStatus === 'waiting_essay'
-                                    ? `Menunggu koreksi (Maks. ${soal.poin})`
-                                    : `Skor: ${score} / ${soal.poin}`}
+                  if (matchedTugas && structAns) {
+                    return (
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                          Rincian Jawaban Terkumpul (Terkunci)
+                        </p>
+                        {matchedTugas.soalList.map((soal, idx) => {
+                          const ans = structAns[soal.id];
+                          const score = itemScores?.[soal.id];
+                          return (
+                            <div
+                              key={soal.id}
+                              className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1120] space-y-2"
+                            >
+                              <div className="flex items-center justify-between gap-2 text-xs font-mono">
+                                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                                  Soal #{idx + 1}
                                 </span>
-                              ) : (
-                                <span className="text-slate-500 dark:text-slate-400">
-                                  {soal.poin} poin
-                                </span>
-                              )}
-                            </div>
+                                {typeof score === 'number' ? (
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300 tabular-nums">
+                                    {soal.type === 'essay' &&
+                                    completedTaskModal.submission.gradingStatus === 'waiting_essay'
+                                      ? `Menunggu koreksi (Maks. ${soal.poin})`
+                                      : `Skor: ${score} / ${soal.poin}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 dark:text-slate-400">
+                                    {soal.poin} poin
+                                  </span>
+                                )}
+                              </div>
 
-                            <MaterialContentRenderer content={soal.pertanyaan} />
+                              <MaterialContentRenderer content={soal.pertanyaan} />
 
-                            <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200">
-                              {soal.type === 'pilihan_ganda' && (
-                                <p dir="auto" className="whitespace-pre-line">
-                                  Jawaban Anda:{' '}
-                                  {typeof ans === 'string' && ans
-                                    ? `${ans}. ${soal.opsi?.[ans as 'A' | 'B' | 'C' | 'D'] || ''}`
-                                    : '(Tidak dijawab)'}
-                                </p>
-                              )}
-                              {soal.type === 'isian_singkat' && (
-                                <p dir="auto" className="whitespace-pre-line">
-                                  Jawaban Anda: {typeof ans === 'string' && ans.trim() ? ans : '(Tidak dijawab)'}
-                                </p>
-                              )}
-                              {soal.type === 'menjodohkan' && (
-                                <div className="space-y-1">
-                                  <p className="font-semibold text-xs text-slate-600 dark:text-slate-400">
-                                    Pasangan yang Anda pilih:
+                              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-[#131C31] border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                                {soal.type === 'pilihan_ganda' && (
+                                  <p dir="auto" className="whitespace-pre-line">
+                                    Jawaban Anda:{' '}
+                                    {typeof ans === 'string' && ans
+                                      ? `${ans}. ${soal.opsi?.[ans as 'A' | 'B' | 'C' | 'D'] || ''}`
+                                      : '(Tidak dijawab)'}
                                   </p>
-                                  {(soal.kiriList || []).map((kiri) => {
-                                    const pickedId =
-                                      ans && typeof ans === 'object' ? ans[kiri.id] : '';
-                                    const pickedText =
-                                      soal.kananList?.find((r) => r.id === pickedId)?.text ||
-                                      '(Belum dipilih)';
-                                    return (
-                                      <p key={kiri.id} dir="auto" className="text-xs whitespace-pre-line">
-                                        {kiri.text} → {pickedText}
-                                      </p>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              {soal.type === 'essay' && (
-                                <p dir="auto" className="whitespace-pre-line">
-                                  {typeof ans === 'string' && ans.trim() ? ans : '(Tidak dijawab)'}
-                                </p>
-                              )}
+                                )}
+                                {soal.type === 'isian_singkat' && (
+                                  <p dir="auto" className="whitespace-pre-line">
+                                    Jawaban Anda: {typeof ans === 'string' && ans.trim() ? ans : '(Tidak dijawab)'}
+                                  </p>
+                                )}
+                                {soal.type === 'menjodohkan' && (
+                                  <div className="space-y-1">
+                                    <p className="font-semibold text-xs text-slate-600 dark:text-slate-400">
+                                      Pasangan yang Anda pilih:
+                                    </p>
+                                    {(soal.kiriList || []).map((kiri) => {
+                                      const pickedId =
+                                        ans && typeof ans === 'object' ? ans[kiri.id] : '';
+                                      const pickedText =
+                                        soal.kananList?.find((r) => r.id === pickedId)?.text ||
+                                        '(Belum dipilih)';
+                                      return (
+                                        <p key={kiri.id} dir="auto" className="text-xs whitespace-pre-line">
+                                          {kiri.text} → {pickedText}
+                                        </p>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                                {soal.type === 'essay' && (
+                                  <p dir="auto" className="whitespace-pre-line">
+                                    {typeof ans === 'string' && ans.trim() ? ans : '(Tidak dijawab)'}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        Jawaban Terkumpul (Terkunci)
+                      </p>
+                      <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1120]">
+                        {completedTaskModal.submission.jawaban || 'Tidak ada catatan teks.'}
+                      </p>
                     </div>
                   );
-                }
-
-                return (
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                      Jawaban Terkumpul (Terkunci)
-                    </p>
-                    <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B1120]">
-                      {completedTaskModal.submission.jawaban || 'Tidak ada catatan teks.'}
-                    </p>
-                  </div>
-                );
-              })()}
+                })()}
 
               {completedTaskModal.submission.fileNama && (
                 <p className="text-xs text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 pt-1">

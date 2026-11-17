@@ -56,7 +56,7 @@ service cloud.firestore {
 
     function isValidStudent(data) {
       return data.keys().hasAll(['id', 'nis', 'nama', 'kelas', 'tingkat', 'usingDefaultPassword', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'nis', 'nama', 'kelas', 'tingkat', 'usingDefaultPassword', 'uid', 'lastPasswordResetAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'nis', 'nama', 'kelas', 'tingkat', 'usingDefaultPassword', 'uid', 'lastPasswordResetAt', 'tahfidzCategory', 'tahfidzLevel', 'updatedAt']) &&
         data.id is string && isValidId(data.id) &&
         data.nis is string && isValidId(data.nis) && data.nis.size() <= 32 &&
         data.nama is string && data.nama.size() >= 1 && data.nama.size() <= 120 &&
@@ -65,12 +65,14 @@ service cloud.firestore {
         data.usingDefaultPassword is bool &&
         (!('uid' in data) || (data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128)) &&
         (!('lastPasswordResetAt' in data) || (data.lastPasswordResetAt is string && data.lastPasswordResetAt.size() <= 40)) &&
+        (!('tahfidzCategory' in data) || data.tahfidzCategory in ['Jilid', 'Tahfidz']) &&
+        (!('tahfidzLevel' in data) || (data.tahfidzLevel is string && data.tahfidzLevel.size() >= 1 && data.tahfidzLevel.size() <= 40)) &&
         data.updatedAt == request.time;
     }
 
     function isValidLearningItem(data) {
       return data.keys().hasAll(['id', 'type', 'judul', 'tingkat', 'targetKelas', 'mapel', 'deskripsi', 'konten', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
-        data.keys().hasOnly(['id', 'type', 'judul', 'tingkat', 'targetKelas', 'mapel', 'deskripsi', 'konten', 'lampiranNama', 'tenggat', 'durasiMenit', 'hasStructuredSoal', 'totalPoin', 'hasEssay', 'soalCount', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'type', 'judul', 'tingkat', 'targetKelas', 'mapel', 'deskripsi', 'konten', 'lampiranNama', 'tenggat', 'durasiMenit', 'hasStructuredSoal', 'totalPoin', 'hasEssay', 'soalCount', 'targetPeserta', 'submissionMode', 'createdAt', 'authorName', 'authorUid', 'updatedAt']) &&
         data.id is string && isValidId(data.id) &&
         data.type in ['materi', 'tugas'] &&
         data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 200 &&
@@ -86,6 +88,8 @@ service cloud.firestore {
         (!('totalPoin' in data) || (data.totalPoin is number && data.totalPoin >= 0 && data.totalPoin <= 10000)) &&
         (!('hasEssay' in data) || data.hasEssay is bool) &&
         (!('soalCount' in data) || (data.soalCount is number && data.soalCount >= 0 && data.soalCount <= 100)) &&
+        (!('targetPeserta' in data) || data.targetPeserta in ['Semua', 'Jilid', 'Tahfidz']) &&
+        (!('submissionMode' in data) || data.submissionMode in ['online', 'offline_jilid']) &&
         data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 30 &&
         data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
@@ -135,7 +139,7 @@ service cloud.firestore {
 
     function isValidSubmission(data) {
       return data.keys().hasAll(['itemId', 'studentNis', 'uid', 'status', 'updatedAt']) &&
-        data.keys().hasOnly(['itemId', 'studentNis', 'uid', 'status', 'sessionStatus', 'startedAt', 'startedAtMs', 'durasiMenit', 'violationCount', 'lastSavedAt', 'jawaban', 'structuredAnswers', 'itemScores', 'autoScore', 'essayScore', 'finalScore', 'maxScore', 'gradingStatus', 'catatanGuru', 'gradedAt', 'fileNama', 'submittedAt', 'submittedAtMs', 'updatedAt']) &&
+        data.keys().hasOnly(['itemId', 'studentNis', 'uid', 'status', 'sessionStatus', 'startedAt', 'startedAtMs', 'durasiMenit', 'violationCount', 'lastSavedAt', 'jawaban', 'structuredAnswers', 'itemScores', 'autoScore', 'essayScore', 'finalScore', 'maxScore', 'nilaiHuruf', 'checkedByGuru', 'checkedAt', 'gradedBy', 'gradingStatus', 'catatanGuru', 'gradedAt', 'fileNama', 'submittedAt', 'submittedAtMs', 'updatedAt']) &&
         data.itemId is string && isValidId(data.itemId) &&
         data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
@@ -153,6 +157,10 @@ service cloud.firestore {
         (!('essayScore' in data) || (data.essayScore is number && data.essayScore >= 0 && data.essayScore <= 10000)) &&
         (!('finalScore' in data) || (data.finalScore is number && data.finalScore >= 0 && data.finalScore <= 10000)) &&
         (!('maxScore' in data) || (data.maxScore is number && data.maxScore >= 0 && data.maxScore <= 10000)) &&
+        (!('nilaiHuruf' in data) || data.nilaiHuruf in ['A', 'B', 'C']) &&
+        (!('checkedByGuru' in data) || data.checkedByGuru is bool) &&
+        (!('checkedAt' in data) || (data.checkedAt is string && data.checkedAt.size() <= 40)) &&
+        (!('gradedBy' in data) || (data.gradedBy is string && data.gradedBy.size() <= 120)) &&
         (!('gradingStatus' in data) || data.gradingStatus in ['pending_auto_grade', 'waiting_essay', 'graded']) &&
         (!('catatanGuru' in data) || (data.catatanGuru is string && data.catatanGuru.size() <= 2000)) &&
         (!('gradedAt' in data) || (data.gradedAt is string && data.gradedAt.size() <= 40)) &&
@@ -295,6 +303,27 @@ service cloud.firestore {
         data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 120 &&
         data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
         data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 40 &&
+        data.createdAtMs is number && data.createdAtMs >= 1000000000000 && data.createdAtMs <= 9999999999999 &&
+        data.updatedAt == request.time;
+    }
+
+    function isValidUjianTahfidz(data) {
+      return data.keys().hasAll(['id', 'studentNis', 'studentName', 'kelas', 'tingkat', 'tanggalUjian', 'penguji', 'levelDiujikan', 'nilai', 'status', 'catatan', 'authorUid', 'createdAtMs', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'studentNis', 'studentUid', 'studentName', 'kelas', 'tingkat', 'tanggalUjian', 'penguji', 'levelDiujikan', 'nilai', 'status', 'naikKeLevel', 'catatan', 'authorUid', 'createdAtMs', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.studentNis is string && isValidId(data.studentNis) && data.studentNis.size() <= 32 &&
+        (!('studentUid' in data) || (data.studentUid is string && data.studentUid.size() <= 128)) &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 120 &&
+        data.kelas is string && data.kelas.size() >= 1 && data.kelas.size() <= 20 &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.tanggalUjian is string && data.tanggalUjian.size() >= 1 && data.tanggalUjian.size() <= 30 &&
+        data.penguji is string && data.penguji.size() >= 1 && data.penguji.size() <= 120 &&
+        data.levelDiujikan is string && data.levelDiujikan.size() >= 1 && data.levelDiujikan.size() <= 40 &&
+        data.nilai is string && data.nilai.size() >= 1 && data.nilai.size() <= 20 &&
+        data.status in ['Lulus', 'Mengulang'] &&
+        (!('naikKeLevel' in data) || (data.naikKeLevel is string && data.naikKeLevel.size() <= 40)) &&
+        data.catatan is string && data.catatan.size() >= 1 && data.catatan.size() <= 2000 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
         data.createdAtMs is number && data.createdAtMs >= 1000000000000 && data.createdAtMs <= 9999999999999 &&
         data.updatedAt == request.time;
     }
@@ -473,10 +502,14 @@ service cloud.firestore {
       allow list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow create: if isSignedIn() && isValidId(submissionId) &&
         isValidSubmission(incoming()) &&
-        incoming().uid == request.auth.uid &&
-        (!('violationCount' in incoming()) || incoming().violationCount == 0) &&
-        (!('autoScore' in incoming()) && !('essayScore' in incoming()) && !('finalScore' in incoming()) && !('itemScores' in incoming()) && !('catatanGuru' in incoming()) && !('gradedAt' in incoming())) &&
-        exists(/databases/$(database)/documents/learningItems/$(incoming().itemId));
+        exists(/databases/$(database)/documents/learningItems/$(incoming().itemId)) && (
+          isAdmin() ||
+          (
+            incoming().uid == request.auth.uid &&
+            (!('violationCount' in incoming()) || incoming().violationCount == 0) &&
+            (!('autoScore' in incoming()) && !('essayScore' in incoming()) && !('finalScore' in incoming()) && !('itemScores' in incoming()) && !('nilaiHuruf' in incoming()) && !('checkedByGuru' in incoming()) && !('checkedAt' in incoming()) && !('gradedBy' in incoming()) && !('catatanGuru' in incoming()) && !('gradedAt' in incoming()))
+          )
+        );
       allow update: if isSignedIn() && isValidId(submissionId) &&
         isValidSubmission(incoming()) && (
           isAdmin() ||
@@ -703,6 +736,59 @@ service cloud.firestore {
         incoming().authorUid == existing().authorUid &&
         isAdmin();
       allow delete: if isSignedIn() && isValidId(pengumumanId) && isAdmin();
+    }
+
+    function isValidPengaturanTahfidz(data) {
+      return data.keys().hasAll(['id', 'kelasAmpu', 'authorUid', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'kelasAmpu', 'authorUid', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) && data.id == 'tahfidz_kelas' &&
+        data.kelasAmpu is list &&
+        data.kelasAmpu.size() <= 12 &&
+        data.kelasAmpu.hasOnly([
+          'X RPL', 'X TKJ', 'X AK', 'X TP 1', 'X TP 2',
+          'XI RPL', 'XI TKJ', 'XI AK', 'XI TP 1', 'XI TP 2',
+          'XII RPL', 'XII TKJ'
+        ]) &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.updatedAt == request.time;
+    }
+
+    match /pengaturan_lms/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(settingId) &&
+        isValidPengaturanTahfidz(incoming()) &&
+        incoming().id == settingId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(settingId) &&
+        isValidPengaturanTahfidz(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(settingId) && isAdmin();
+    }
+
+    match /ujian_tahfidz/{examId} {
+      allow get: if isSignedIn() && isValidId(examId) && (
+        isAdmin() ||
+        ('studentUid' in existing() && existing().studentUid == request.auth.uid)
+      );
+      allow list: if isAdmin() || (isSignedIn() && resource.data.studentUid == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(examId) &&
+        isValidUjianTahfidz(incoming()) &&
+        incoming().id == examId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(examId) &&
+        isValidUjianTahfidz(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(examId) && isAdmin();
     }
   }
 }

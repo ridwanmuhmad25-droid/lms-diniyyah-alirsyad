@@ -26,14 +26,17 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { BookOpen, Loader2, LogOut, MailCheck, Moon, RefreshCw, Sun } from 'lucide-react';
+import { DzikirLoadingScreen } from './components/DzikirLoadingScreen';
 import { LoginView } from './components/LoginView';
 import { GuruDashboard } from './components/guru/GuruDashboard';
 import { LockedExamView } from './components/siswa/LockedExamView';
 import { SiswaDashboard } from './components/siswa/SiswaDashboard';
 import {
+  DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   GURU_ADMIN_EMAIL,
   GURU_PROFILE,
   isAuthorizedGuruEmail,
+  isValidClassName,
 } from './data/mockData';
 import {
   OperationType,
@@ -47,12 +50,15 @@ import {
   gradeStructuredSubmission,
 } from './lib/tugasGrading';
 import { computeAllClassProgress } from './lib/classProgress';
+import { inferCategoryFromLevel } from './lib/tahfidzUtils';
 import {
   AssignmentSubmission,
   AuthSession,
+  ClassName,
   GuruSoalDraft,
   JadwalMapelItem,
   JilidBook,
+  JilidLetterGrade,
   JilidReadProgress,
   KunciTugasDocument,
   LearningItem,
@@ -65,8 +71,11 @@ import {
   StatistikKelasItem,
   Student,
   StudentStructuredAnswerValue,
+  TahfidzCategory,
   TahfidzRecord,
   TugasDocument,
+  UjianTahfidzRecord,
+  UjianTahfidzStatus,
 } from './types/lms';
 
 function formatTimestamp(date: Date): string {
@@ -125,6 +134,10 @@ export default function App() {
   const [notificationReads, setNotificationReads] = useState<NotifikasiReadRecord[]>([]);
   const [statistikKelas, setStatistikKelas] = useState<StatistikKelasItem[]>([]);
   const [pengumumanList, setPengumumanList] = useState<PengumumanItem[]>([]);
+  const [ujianTahfidzList, setUjianTahfidzList] = useState<UjianTahfidzRecord[]>([]);
+  const [tahfidzTaughtClasses, setTahfidzTaughtClasses] = useState<ClassName[]>(
+    DEFAULT_TAHFIDZ_TAUGHT_CLASSES
+  );
   const [guruStudentsLoaded, setGuruStudentsLoaded] = useState(false);
   const [guruItemsLoaded, setGuruItemsLoaded] = useState(false);
   const [guruReadsLoaded, setGuruReadsLoaded] = useState(false);
@@ -154,6 +167,8 @@ export default function App() {
     setNotificationReads([]);
     setStatistikKelas([]);
     setPengumumanList([]);
+    setUjianTahfidzList([]);
+    setTahfidzTaughtClasses(DEFAULT_TAHFIDZ_TAUGHT_CLASSES);
     setGuruStudentsLoaded(false);
     setGuruItemsLoaded(false);
     setGuruReadsLoaded(false);
@@ -536,6 +551,39 @@ export default function App() {
           (err) => handleFirestoreError(err, OperationType.LIST, 'pengumuman')
         )
       );
+
+      unsubscribers.push(
+        onSnapshot(
+          collection(db, 'ujian_tahfidz'),
+          (snap) => {
+            const list = snap.docs.map((d) => d.data() as UjianTahfidzRecord);
+            list.sort((a, b) => b.createdAtMs - a.createdAtMs);
+            setUjianTahfidzList(list);
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'ujian_tahfidz')
+        )
+      );
+
+      unsubscribers.push(
+        onSnapshot(
+          doc(db, 'pengaturan_lms', 'tahfidz_kelas'),
+          (snap) => {
+            if (snap.exists()) {
+              const data = snap.data() as { kelasAmpu?: unknown };
+              if (Array.isArray(data.kelasAmpu)) {
+                const valid = data.kelasAmpu.filter(
+                  (c): c is ClassName => typeof c === 'string' && isValidClassName(c)
+                );
+                setTahfidzTaughtClasses(valid);
+                return;
+              }
+            }
+            setTahfidzTaughtClasses(DEFAULT_TAHFIDZ_TAUGHT_CLASSES);
+          },
+          (err) =>
+            handleFirestoreError(err, OperationType.GET, 'pengaturan_lms/tahfidz_kelas')
+        )
+      );
     } else if (session.role === 'siswa' && session.nis && session.tingkat && session.kelas) {
       setSiswaItemsLoaded(false);
       setSiswaSubmissionsLoaded(false);
@@ -722,6 +770,42 @@ export default function App() {
           (err) => handleFirestoreError(err, OperationType.LIST, 'pengumuman')
         )
       );
+
+      unsubscribers.push(
+        onSnapshot(
+          query(
+            collection(db, 'ujian_tahfidz'),
+            where('studentUid', '==', studentUid)
+          ),
+          (snap) => {
+            const list = snap.docs.map((d) => d.data() as UjianTahfidzRecord);
+            list.sort((a, b) => b.createdAtMs - a.createdAtMs);
+            setUjianTahfidzList(list);
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'ujian_tahfidz')
+        )
+      );
+
+      unsubscribers.push(
+        onSnapshot(
+          doc(db, 'pengaturan_lms', 'tahfidz_kelas'),
+          (snap) => {
+            if (snap.exists()) {
+              const data = snap.data() as { kelasAmpu?: unknown };
+              if (Array.isArray(data.kelasAmpu)) {
+                const valid = data.kelasAmpu.filter(
+                  (c): c is ClassName => typeof c === 'string' && isValidClassName(c)
+                );
+                setTahfidzTaughtClasses(valid);
+                return;
+              }
+            }
+            setTahfidzTaughtClasses(DEFAULT_TAHFIDZ_TAUGHT_CLASSES);
+          },
+          (err) =>
+            handleFirestoreError(err, OperationType.GET, 'pengaturan_lms/tahfidz_kelas')
+        )
+      );
     }
 
     return () => {
@@ -748,7 +832,9 @@ export default function App() {
       students,
       learningItems,
       readRecords,
-      submissions
+      submissions,
+      tahfidzRecords,
+      tahfidzTaughtClasses
     );
 
     const existingMap = new Map(statistikKelas.map((item) => [item.id, item]));
@@ -806,10 +892,12 @@ export default function App() {
     learningItems,
     readRecords,
     submissions,
+    tahfidzRecords,
+    tahfidzTaughtClasses,
     statistikKelas,
   ]);
 
-  // Keep tahfidzRecords.studentUid synced when Guru views students who claimed their UID
+  // Keep tahfidzRecords.studentUid & ujian_tahfidz.studentUid synced when Guru views students who claimed their UID
   useEffect(() => {
     if (session?.role !== 'guru') return;
     tahfidzRecords.forEach((rec) => {
@@ -823,14 +911,37 @@ export default function App() {
         );
       }
     });
-  }, [session?.role, students, tahfidzRecords]);
+    ujianTahfidzList.forEach((exam) => {
+      const matchedStudent = students.find((s) => s.nis === exam.studentNis);
+      if (matchedStudent?.uid && exam.studentUid !== matchedStudent.uid) {
+        updateDoc(doc(db, 'ujian_tahfidz', exam.id), {
+          studentUid: matchedStudent.uid,
+          updatedAt: serverTimestamp(),
+        }).catch((err) =>
+          handleFirestoreError(err, OperationType.UPDATE, `ujian_tahfidz/${exam.id}`)
+        );
+      }
+    });
+    submissions.forEach((sub) => {
+      const matchedStudent = students.find((s) => s.nis === sub.studentNis);
+      if (matchedStudent?.uid && sub.uid !== matchedStudent.uid) {
+        const subId = `${sub.itemId}__${sub.studentNis}`;
+        updateDoc(doc(db, 'submissions', subId), {
+          uid: matchedStudent.uid,
+          updatedAt: serverTimestamp(),
+        }).catch((err) =>
+          handleFirestoreError(err, OperationType.UPDATE, `submissions/${subId}`)
+        );
+      }
+    });
+  }, [session?.role, students, tahfidzRecords, ujianTahfidzList, submissions]);
 
   // Firestore Mutations
   const handleImportStudents = async (newStudents: Student[]) => {
     const batch = writeBatch(db);
     newStudents.forEach((st) => {
       const ref = doc(db, 'students', st.nis);
-      batch.set(ref, {
+      const docData: Record<string, unknown> = {
         id: st.nis,
         nis: st.nis,
         nama: st.nama,
@@ -838,13 +949,33 @@ export default function App() {
         tingkat: st.tingkat,
         usingDefaultPassword: true,
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (st.tahfidzCategory) docData.tahfidzCategory = st.tahfidzCategory;
+      if (st.tahfidzLevel) docData.tahfidzLevel = st.tahfidzLevel;
+      batch.set(ref, docData);
     });
 
     try {
       await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'students');
+    }
+  };
+
+  const handleUpdateStudentTahfidzProfile = async (
+    nis: string,
+    tahfidzCategory: TahfidzCategory,
+    tahfidzLevel: string
+  ) => {
+    const path = `students/${nis}`;
+    try {
+      await updateDoc(doc(db, 'students', nis), {
+        tahfidzCategory,
+        tahfidzLevel,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
     }
   };
 
@@ -858,6 +989,30 @@ export default function App() {
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const handleDeleteStudent = async (student: Student) => {
+    const path = `students/${student.nis}`;
+    try {
+      await deleteDoc(doc(db, 'students', student.nis));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const handleSaveTahfidzTaughtClasses = async (kelasAmpu: ClassName[]) => {
+    if (!firebaseUser) return;
+    const path = 'pengaturan_lms/tahfidz_kelas';
+    try {
+      await setDoc(doc(db, 'pengaturan_lms', 'tahfidz_kelas'), {
+        id: 'tahfidz_kelas',
+        kelasAmpu,
+        authorUid: firebaseUser.uid,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
     }
   };
 
@@ -959,6 +1114,16 @@ export default function App() {
     if (item.tenggat) payload.tenggat = item.tenggat;
     if (typeof item.durasiMenit === 'number') {
       payload.durasiMenit = item.durasiMenit;
+    }
+    if (
+      item.mapel === 'Tahfidz/Tahsin' &&
+      item.type === 'tugas' &&
+      item.targetPeserta
+    ) {
+      payload.targetPeserta = item.targetPeserta;
+    }
+    if (item.submissionMode) {
+      payload.submissionMode = item.submissionMode;
     }
 
     const hasStructured = item.type === 'tugas' && soalDrafts.length > 0;
@@ -1297,6 +1462,65 @@ export default function App() {
     }
   };
 
+  const handleSaveJilidSubmissionChecklist = async ({
+    item,
+    student,
+    checked,
+    nilaiHuruf,
+    catatanGuru,
+  }: {
+    item: LearningItem;
+    student: Student;
+    checked: boolean;
+    nilaiHuruf?: JilidLetterGrade;
+    catatanGuru?: string;
+  }) => {
+    if (!firebaseUser) return;
+    const submissionId = `${item.id}__${student.nis}`;
+    const path = `submissions/${submissionId}`;
+    const existing = submissions.find(
+      (s) => s.itemId === item.id && s.studentNis === student.nis
+    );
+    const now = new Date();
+    const nowFormatted = formatTimestamp(now);
+    const nowMs = now.getTime();
+    const resolvedUid =
+      student.uid ||
+      (existing?.uid && !existing.uid.startsWith('pending__') ? existing.uid : undefined) ||
+      `pending__${student.nis}`;
+
+    const payload: Record<string, unknown> = {
+      itemId: item.id,
+      studentNis: student.nis,
+      uid: resolvedUid,
+      status: checked ? 'Selesai' : 'Belum',
+      checkedByGuru: checked,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (checked) {
+      payload.sessionStatus = 'completed';
+      payload.checkedAt = existing?.checkedAt || nowFormatted;
+      payload.submittedAt = existing?.submittedAt || nowFormatted;
+      payload.submittedAtMs = existing?.submittedAtMs || nowMs;
+      payload.gradedBy = GURU_PROFILE.nama;
+      if (nilaiHuruf) {
+        payload.nilaiHuruf = nilaiHuruf;
+        payload.gradingStatus = 'graded';
+        payload.gradedAt = nowFormatted;
+      }
+      if (catatanGuru && catatanGuru.trim()) {
+        payload.catatanGuru = catatanGuru.trim();
+      }
+    }
+
+    try {
+      await setDoc(doc(db, 'submissions', submissionId), payload);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
   const handleChangeStudentPassword = async (
     studentNis: string,
     currentPassword: string,
@@ -1387,6 +1611,77 @@ export default function App() {
     const path = `tahfidzRecords/${recordId}`;
     try {
       await deleteDoc(doc(db, 'tahfidzRecords', recordId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  const handleAddUjianTahfidz = async (data: {
+    student: Student;
+    tanggalUjian: string;
+    penguji: string;
+    levelDiujikan: string;
+    nilai: string;
+    status: UjianTahfidzStatus;
+    naikKeLevel?: string;
+    catatan: string;
+  }) => {
+    if (!firebaseUser) return;
+    const nowMs = Date.now();
+    const id = `ujt-${nowMs}-${Math.random().toString(36).slice(2, 6)}`;
+    const path = `ujian_tahfidz/${id}`;
+    const batch = writeBatch(db);
+
+    const examPayload: Record<string, unknown> = {
+      id,
+      studentNis: data.student.nis,
+      studentName: data.student.nama,
+      kelas: data.student.kelas,
+      tingkat: data.student.tingkat,
+      tanggalUjian: data.tanggalUjian,
+      penguji: data.penguji.trim() || GURU_PROFILE.nama,
+      levelDiujikan: data.levelDiujikan,
+      nilai: data.nilai.trim(),
+      status: data.status,
+      catatan: data.catatan.trim() || 'Tetap semangat murajaah hafalan dan perbaiki tajwid.',
+      authorUid: firebaseUser.uid,
+      createdAtMs: nowMs,
+      updatedAt: serverTimestamp(),
+    };
+    if (data.student.uid) {
+      examPayload.studentUid = data.student.uid;
+    }
+    if (data.status === 'Lulus' && data.naikKeLevel) {
+      examPayload.naikKeLevel = data.naikKeLevel;
+    }
+
+    batch.set(doc(db, 'ujian_tahfidz', id), examPayload);
+
+    if (data.status === 'Lulus' && data.naikKeLevel) {
+      batch.update(doc(db, 'students', data.student.nis), {
+        tahfidzLevel: data.naikKeLevel,
+        tahfidzCategory: inferCategoryFromLevel(data.naikKeLevel),
+        updatedAt: serverTimestamp(),
+      });
+    } else if (!data.student.tahfidzLevel) {
+      batch.update(doc(db, 'students', data.student.nis), {
+        tahfidzLevel: data.levelDiujikan,
+        tahfidzCategory: inferCategoryFromLevel(data.levelDiujikan),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    try {
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const handleDeleteUjianTahfidz = async (examId: string) => {
+    const path = `ujian_tahfidz/${examId}`;
+    try {
+      await deleteDoc(doc(db, 'ujian_tahfidz', examId));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
@@ -1744,76 +2039,7 @@ export default function App() {
   };
 
   if (!authReady) {
-    return (
-     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B1120] transition-colors">
-          <style>{`
-            @keyframes dzikirTuing {
-              0% {
-                opacity: 0;
-                transform: translateY(-22px) scale(0.94, 1.08);
-              }
-              4% {
-                opacity: 1;
-                transform: translateY(4px) scale(1.07, 0.91);
-              }
-              7% {
-                opacity: 1;
-                transform: translateY(-4px) scale(0.96, 1.04);
-              }
-              10% {
-                opacity: 1;
-                transform: translateY(1.5px) scale(1.02, 0.98);
-              }
-              13% {
-                opacity: 1;
-                transform: translateY(0px) scale(1, 1);
-              }
-              27% {
-                opacity: 1;
-                transform: translateY(0px) scale(1, 1);
-              }
-              33% {
-                opacity: 0;
-                transform: translateY(18px) scale(0.95, 1.05);
-              }
-              33.1%, 100% {
-                opacity: 0;
-                transform: translateY(-22px) scale(0.94, 1.08);
-              }
-            }
-            .dzikir-item {
-              position: absolute;
-              inset: 0;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              opacity: 0;
-              animation: dzikirTuing 5.4s cubic-bezier(0.25, 1, 0.5, 1) infinite;
-            }
-          `}</style>
-
-          <div className="relative h-8 w-44 overflow-hidden select-none">
-            <span
-              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
-              style={{ animationDelay: '0s' }}
-            >
-              Subhanallah
-            </span>
-            <span
-              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
-              style={{ animationDelay: '1.8s' }}
-            >
-              Alhamdulillah
-            </span>
-            <span
-              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
-              style={{ animationDelay: '3.6s' }}
-            >
-              Allahuakbar
-            </span>
-          </div>
-        </div>
-    );
+    return <DzikirLoadingScreen />;
   }
 
   if (needsGuruEmailVerification && firebaseUser) {
@@ -2003,21 +2229,29 @@ export default function App() {
         readRecords={readRecords}
         submissions={submissions}
         tahfidzRecords={tahfidzRecords}
+        ujianTahfidzList={ujianTahfidzList}
         jilidBooks={jilidBooks}
         jilidProgress={jilidProgress}
         jadwalMapel={jadwalMapel}
         protaList={protaList}
         pengumumanList={pengumumanList}
+        tahfidzTaughtClasses={tahfidzTaughtClasses}
         notifications={notifications}
         isDark={isDark}
         onToggleDark={toggleDarkMode}
         onImportStudents={handleImportStudents}
         onResetStudentPassword={handleResetStudentPassword}
+        onDeleteStudent={handleDeleteStudent}
+        onSaveTahfidzTaughtClasses={handleSaveTahfidzTaughtClasses}
+        onUpdateStudentTahfidzProfile={handleUpdateStudentTahfidzProfile}
         onSaveLearningItemWithSoal={handleSaveLearningItemWithSoal}
         onDeleteLearningItem={handleDeleteLearningItem}
         onSaveTeacherGrading={handleSaveTeacherGrading}
+        onSaveJilidSubmissionChecklist={handleSaveJilidSubmissionChecklist}
         onAddTahfidzRecord={handleAddTahfidzRecord}
         onDeleteTahfidzRecord={handleDeleteTahfidzRecord}
+        onAddUjianTahfidz={handleAddUjianTahfidz}
+        onDeleteUjianTahfidz={handleDeleteUjianTahfidz}
         onAddJilidBook={handleAddJilidBook}
         onDeleteJilidBook={handleDeleteJilidBook}
         onAddJadwalMapel={handleAddJadwalMapel}
@@ -2135,12 +2369,18 @@ export default function App() {
       readRecords={readRecords}
       submissions={submissions}
       tahfidzRecords={tahfidzRecords}
+      ujianTahfidzList={ujianTahfidzList}
       jilidBooks={jilidBooks}
       jilidProgress={jilidProgress}
       jadwalMapel={jadwalMapel}
       statistikKelas={statistikKelas}
       pengumumanList={pengumumanList}
-      notifications={notifications}
+      tahfidzTaughtClasses={tahfidzTaughtClasses}
+      notifications={notifications.filter(
+        (n) =>
+          n.mapel !== 'Tahfidz/Tahsin' ||
+          tahfidzTaughtClasses.includes(activeStudent.kelas)
+      )}
       notificationReads={notificationReads}
       isDark={isDark}
       onToggleDark={toggleDarkMode}

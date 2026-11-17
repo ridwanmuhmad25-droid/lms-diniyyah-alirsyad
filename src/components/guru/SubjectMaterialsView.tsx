@@ -308,6 +308,14 @@ export function SubjectMaterialsView({
                               </span>
                             </>
                           )}
+                          {item.targetPeserta && item.targetPeserta !== 'Semua' && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 text-[11px] font-semibold">
+                                Khusus {item.targetPeserta}
+                              </span>
+                            </>
+                          )}
                         </>
                       )}
                     </div>

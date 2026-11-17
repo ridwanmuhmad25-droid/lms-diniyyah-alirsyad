@@ -26,6 +26,8 @@ interface ParsedRow {
   nis: string;
   kelasRaw: string;
   validKelas?: ClassName;
+  tahfidzCategory?: 'Jilid' | 'Tahfidz';
+  tahfidzLevel?: string;
   error?: string;
 }
 
@@ -75,6 +77,8 @@ export function CsvImportModal({
       const nama = cols[0] || '';
       const nis = cols[1] || '';
       const kelasRaw = cols[2] || '';
+      const kategoriRaw = (cols[3] || '').toLowerCase();
+      const levelRaw = (cols[4] || '').trim();
 
       let error: string | undefined;
       let validKelas: ClassName | undefined;
@@ -99,12 +103,21 @@ export function CsvImportModal({
         seenInBatch.add(nis);
       }
 
+      const tahfidzCategory: 'Jilid' | 'Tahfidz' | undefined =
+        kategoriRaw === 'jilid'
+          ? 'Jilid'
+          : kategoriRaw === 'tahfidz'
+          ? 'Tahfidz'
+          : undefined;
+
       rows.push({
         lineNumber: idx + 1,
         nama,
         nis,
         kelasRaw,
         validKelas,
+        tahfidzCategory,
+        tahfidzLevel: levelRaw || undefined,
         error,
       });
     });
@@ -144,6 +157,8 @@ export function CsvImportModal({
         kelas,
         tingkat: getGradeFromClass(kelas),
         usingDefaultPassword: true,
+        ...(row.tahfidzCategory ? { tahfidzCategory: row.tahfidzCategory } : {}),
+        ...(row.tahfidzLevel ? { tahfidzLevel: row.tahfidzLevel } : {}),
       };
     });
 

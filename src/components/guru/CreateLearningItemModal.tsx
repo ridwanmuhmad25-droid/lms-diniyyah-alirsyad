@@ -9,7 +9,11 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { GRADE_CLASSES, getSubjectsForGrade } from '../../data/mockData';
+import {
+  DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
+  GRADE_CLASSES,
+  getSubjectsForGrade,
+} from '../../data/mockData';
 import { createEmptySoalDraft, reconstructDraftsFromTugasAndKunci } from '../../lib/tugasGrading';
 import { getSubjectTheme, PRIMARY_CTA_CLASS } from '../../lib/themePalette';
 import {
@@ -19,6 +23,7 @@ import {
   KunciTugasDocument,
   LearningItem,
   LearningItemType,
+  LearningTargetPeserta,
   SoalType,
   SubjectName,
   TugasDocument,
@@ -32,6 +37,7 @@ interface CreateLearningItemModalProps {
   editingItem?: LearningItem | null;
   editingTugas?: TugasDocument | null;
   editingKunci?: KunciTugasDocument | null;
+  tahfidzTaughtClasses?: ClassName[];
   onClose: () => void;
   onSubmit: (
     item: LearningItem,
@@ -55,6 +61,7 @@ export function CreateLearningItemModal({
   editingItem = null,
   editingTugas = null,
   editingKunci = null,
+  tahfidzTaughtClasses = DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   onClose,
   onSubmit,
 }: CreateLearningItemModalProps) {
@@ -70,6 +77,8 @@ export function CreateLearningItemModal({
   const [formDeadline, setFormDeadline] = useState('2026-11-25');
   const [formDurationMinutes, setFormDurationMinutes] = useState('30');
   const [formAttachment, setFormAttachment] = useState('');
+  const [formTargetPeserta, setFormTargetPeserta] =
+    useState<LearningTargetPeserta>('Jilid');
   const [soalDrafts, setSoalDrafts] = useState<GuruSoalDraft[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -86,9 +95,17 @@ export function CreateLearningItemModal({
       setFormTitle(editingItem.judul);
       setFormDesc(editingItem.deskripsi);
       setFormContent(editingItem.konten);
-      setFormDeadline(editingItem.tenggat || '2026-11-25');
+      const isEditingJilidOffline =
+        editingItem.submissionMode === 'offline_jilid' ||
+        (editingItem.mapel === 'Tahfidz/Tahsin' &&
+          editingItem.type === 'tugas' &&
+          editingItem.targetPeserta === 'Jilid');
+      setFormDeadline(
+        editingItem.tenggat || (isEditingJilidOffline ? '' : '2026-11-25')
+      );
       setFormDurationMinutes(String(editingItem.durasiMenit || 30));
       setFormAttachment(editingItem.lampiranNama || '');
+      setFormTargetPeserta(editingItem.targetPeserta || 'Semua');
 
       if (editingItem.type === 'tugas' && editingTugas) {
         setSoalDrafts(reconstructDraftsFromTugasAndKunci(editingTugas, editingKunci));
@@ -97,15 +114,6 @@ export function CreateLearningItemModal({
       }
       return;
     }
-
-    setFormType(defaultType);
-    setFormTargetClass('ALL');
-    setFormTitle('');
-    setFormDesc('');
-    setFormContent('');
-    setFormDeadline('2026-11-25');
-    setFormDurationMinutes('30');
-    setFormAttachment('');
 
     const resolvedSubject: SubjectName =
       lockedSubject === 'Bahasa Arab'
@@ -116,12 +124,25 @@ export function CreateLearningItemModal({
         ? 'Tahfidz/Tahsin'
         : 'Aqidah';
 
+    const initialIsJilidOffline =
+      resolvedSubject === 'Tahfidz/Tahsin' && defaultType === 'tugas';
+
+    setFormType(defaultType);
+    setFormTargetClass('ALL');
+    setFormTitle('');
+    setFormDesc('');
+    setFormContent('');
+    setFormDeadline(initialIsJilidOffline ? '' : '2026-11-25');
+    setFormDurationMinutes('30');
+    setFormAttachment('');
+
     if (lockedSubject === 'Bahasa Arab' || lockedSubject === 'Tahfidz/Tahsin') {
       setFormGrade('XI');
     } else {
       setFormGrade('X');
     }
     setFormSubject(resolvedSubject);
+    setFormTargetPeserta(initialIsJilidOffline ? 'Jilid' : 'Semua');
 
     if (
       defaultType === 'tugas' &&
@@ -140,6 +161,10 @@ export function CreateLearningItemModal({
   const supportsStructuredSoal =
     formType === 'tugas' &&
     (effectiveSubject === 'Bahasa Arab' || effectiveSubject === 'Aqidah');
+  const isJilidOffline =
+    formType === 'tugas' &&
+    effectiveSubject === 'Tahfidz/Tahsin' &&
+    formTargetPeserta === 'Jilid';
 
   const allowedGrades: GradeLevel[] =
     lockedSubject === 'Bahasa Arab' || lockedSubject === 'Tahfidz/Tahsin'
@@ -162,6 +187,14 @@ export function CreateLearningItemModal({
         setFormSubject(nextSub);
         if (
           formType === 'tugas' &&
+          nextSub === 'Tahfidz/Tahsin' &&
+          !editingItem
+        ) {
+          setFormTargetPeserta('Jilid');
+          setFormDeadline('');
+        }
+        if (
+          formType === 'tugas' &&
           (nextSub === 'Bahasa Arab' || nextSub === 'Aqidah') &&
           soalDrafts.length === 0
         ) {
@@ -173,6 +206,14 @@ export function CreateLearningItemModal({
 
   const handleTypeSwitch = (nextType: LearningItemType) => {
     setFormType(nextType);
+    if (
+      nextType === 'tugas' &&
+      effectiveSubject === 'Tahfidz/Tahsin' &&
+      !editingItem
+    ) {
+      setFormTargetPeserta('Jilid');
+      setFormDeadline('');
+    }
     if (
       nextType === 'tugas' &&
       (effectiveSubject === 'Bahasa Arab' || effectiveSubject === 'Aqidah') &&
@@ -265,6 +306,7 @@ export function CreateLearningItemModal({
     const parsedDuration = Number(formDurationMinutes);
     if (
       formType === 'tugas' &&
+      !isJilidOffline &&
       (!Number.isFinite(parsedDuration) || parsedDuration < 1 || parsedDuration > 600)
     ) {
       setSubmitError('Durasi pengerjaan tugas harus antara 1 sampai 600 menit.');
@@ -337,12 +379,18 @@ export function CreateLearningItemModal({
       deskripsi: formDesc.trim(),
       konten: finalContent,
       lampiranNama: formAttachment.trim() || undefined,
-      tenggat: formType === 'tugas' ? formDeadline : undefined,
-      durasiMenit: formType === 'tugas' ? Math.round(parsedDuration) : undefined,
+      tenggat: formType === 'tugas' ? formDeadline.trim() || undefined : undefined,
+      durasiMenit:
+        formType === 'tugas' && !isJilidOffline ? Math.round(parsedDuration) : undefined,
       hasStructuredSoal: formType === 'tugas' ? hasStructured : undefined,
       totalPoin: formType === 'tugas' && hasStructured ? totalPoin : undefined,
       hasEssay: formType === 'tugas' && hasStructured ? hasEssay : undefined,
       soalCount: formType === 'tugas' && hasStructured ? activeDrafts.length : undefined,
+      targetPeserta:
+        formType === 'tugas' && effectiveSubject === 'Tahfidz/Tahsin'
+          ? formTargetPeserta
+          : undefined,
+      submissionMode: isJilidOffline ? 'offline_jilid' : undefined,
       createdAt: editingItem ? editingItem.createdAt : new Date().toISOString().slice(0, 10),
       authorName: editingItem ? editingItem.authorName : authorName,
       authorUid: editingItem?.authorUid,
@@ -482,6 +530,14 @@ export function CreateLearningItemModal({
                     setFormSubject(nextSub);
                     if (
                       formType === 'tugas' &&
+                      nextSub === 'Tahfidz/Tahsin' &&
+                      !editingItem
+                    ) {
+                      setFormTargetPeserta('Jilid');
+                      setFormDeadline('');
+                    }
+                    if (
+                      formType === 'tugas' &&
                       (nextSub === 'Bahasa Arab' || nextSub === 'Aqidah') &&
                       soalDrafts.length === 0
                     ) {
@@ -501,29 +557,122 @@ export function CreateLearningItemModal({
           </div>
 
           {/* Distribusi Kelas */}
-          <div>
-            <label
-              htmlFor="modal-upload-target-class"
-              className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5"
-            >
-              Distribusi Kelas
-            </label>
-            <select
-              id="modal-upload-target-class"
-              value={formTargetClass}
-              onChange={(e) => setFormTargetClass(e.target.value as ClassName | 'ALL')}
-              className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
-            >
-              <option value="ALL">
-                Semua Kelas {formGrade} ({GRADE_CLASSES[formGrade].join(', ')})
-              </option>
-              {GRADE_CLASSES[formGrade].map((cls) => (
-                <option key={cls} value={cls}>
-                  Khusus {cls}
-                </option>
-              ))}
-            </select>
-          </div>
+          {(() => {
+            const selectableGradeClasses =
+              effectiveSubject === 'Tahfidz/Tahsin'
+                ? GRADE_CLASSES[formGrade].filter(
+                    (cls) =>
+                      tahfidzTaughtClasses.includes(cls) ||
+                      (editingItem && editingItem.targetKelas === cls)
+                  )
+                : GRADE_CLASSES[formGrade];
+
+            return (
+              <div>
+                <label
+                  htmlFor="modal-upload-target-class"
+                  className="block text-xs font-semibold text-slate-900 dark:text-slate-100 mb-1.5"
+                >
+                  Distribusi Kelas
+                </label>
+                <select
+                  id="modal-upload-target-class"
+                  value={
+                    formTargetClass === 'ALL' ||
+                    selectableGradeClasses.includes(formTargetClass)
+                      ? formTargetClass
+                      : 'ALL'
+                  }
+                  onChange={(e) => setFormTargetClass(e.target.value as ClassName | 'ALL')}
+                  className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                >
+                  <option value="ALL">
+                    {effectiveSubject === 'Tahfidz/Tahsin'
+                      ? `Semua Kelas Ampu Tahfidz ${formGrade} (${
+                          selectableGradeClasses.length > 0
+                            ? selectableGradeClasses.join(', ')
+                            : 'Belum ada kelas dicentang'
+                        })`
+                      : `Semua Kelas ${formGrade} (${selectableGradeClasses.join(', ')})`}
+                  </option>
+                  {selectableGradeClasses.map((cls) => (
+                    <option key={cls} value={cls}>
+                      Khusus {cls}
+                    </option>
+                  ))}
+                </select>
+                {effectiveSubject === 'Tahfidz/Tahsin' && (
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Hanya menampilkan kelas ampu Tahfidz aktif (XI TKJ &amp; XI AK dikecualikan secara default).
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Target Peserta Khusus Tahfidz/Tahsin */}
+          {formType === 'tugas' && effectiveSubject === 'Tahfidz/Tahsin' && (
+            <div className="p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/60 dark:bg-teal-950/30 space-y-2">
+              <div>
+                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100">
+                  Target Peserta Tugas Tahfidz/Tahsin
+                </span>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                  Pilih apakah tugas ini khusus untuk kelompok Jilid (mis. tugas menulis) agar siswa Tahfidz tidak dianggap menunggak tugas.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {(
+                  [
+                    {
+                      value: 'Jilid',
+                      label: 'Khusus Siswa Jilid (Tugas Menulis)',
+                    },
+                    {
+                      value: 'Tahfidz',
+                      label: 'Khusus Siswa Tahfidz',
+                    },
+                    {
+                      value: 'Semua',
+                      label: 'Semua Siswa XI & XII',
+                    },
+                  ] as const
+                ).map((opt) => {
+                  const active = formTargetPeserta === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setFormTargetPeserta(opt.value);
+                        if (!editingItem && opt.value === 'Jilid') {
+                          setFormDeadline('');
+                        }
+                      }}
+                      className={`min-h-[40px] px-3 py-2 rounded-xl border text-xs font-semibold text-left transition-all ${
+                        active
+                          ? 'border-teal-600 bg-gradient-to-r from-teal-500 to-emerald-500 text-white shadow-sm'
+                          : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {formTargetPeserta === 'Jilid' && (
+                <div className="mt-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/70 text-xs text-amber-950 dark:text-amber-200 space-y-1">
+                  <p className="font-bold">
+                    Jenis Pengumpulan: Kumpul Langsung Buku Tulis (Ceklis Guru)
+                  </p>
+                  <p className="text-[11px] opacity-90 leading-relaxed">
+                    Tanpa batas durasi waktu dan tanpa form upload online. Siswa mengerjakan di buku tulis, lalu guru menceklis &amp; memberi nilai huruf (A / B / C) secara langsung.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Judul */}
           <div>
@@ -544,6 +693,10 @@ export function CreateLearningItemModal({
                   ? formType === 'materi'
                     ? 'Contoh: Hiwar Tentang Kegiatan Sehari-hari'
                     : 'Contoh: Evaluasi Mufradat & Qawaid Bab 2'
+                  : effectiveSubject === 'Tahfidz/Tahsin'
+                  ? formType === 'materi'
+                    ? 'Contoh: Pengenalan Makharijul Huruf & Mad Thabi’i'
+                    : 'Contoh: Tugas Menulis Huruf Sambung Jilid 3'
                   : formType === 'materi'
                   ? 'Contoh: Dalil Tauhid Uluhiyah'
                   : 'Contoh: Ujian Pemahaman Aqidah Islamiyah'
@@ -608,7 +761,55 @@ export function CreateLearningItemModal({
 
           {/* Durasi, Tenggat & Lampiran */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {formType === 'tugas' && (
+            {formType === 'tugas' && isJilidOffline && (
+              <>
+                <div className="p-3.5 rounded-xl border border-teal-200 dark:border-teal-800/70 bg-teal-50/70 dark:bg-teal-950/30 flex flex-col justify-center">
+                  <span className="text-[11px] font-bold uppercase tracking-wide text-teal-800 dark:text-teal-300">
+                    Jenis Pengumpulan
+                  </span>
+                  <p className="mt-1 text-xs font-bold text-slate-900 dark:text-slate-100">
+                    Kumpul Langsung Buku Tulis (Ceklis Guru)
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-600 dark:text-slate-400">
+                    Tanpa batas durasi waktu (timer nonaktif).
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <label
+                      htmlFor="modal-upload-deadline"
+                      className="block text-xs font-semibold text-slate-900 dark:text-slate-100"
+                    >
+                      Tenggat Waktu (Opsional)
+                    </label>
+                    {formDeadline && (
+                      <button
+                        type="button"
+                        onClick={() => setFormDeadline('')}
+                        className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                      >
+                        Nonaktifkan
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="modal-upload-deadline"
+                    type="date"
+                    value={formDeadline}
+                    onChange={(e) => setFormDeadline(e.target.value)}
+                    className="w-full min-h-[44px] px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0B1120] text-sm text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {formDeadline
+                      ? `Tenggat aktif: ${formDeadline}`
+                      : 'Nonaktif — siswa dapat menyetorkan buku tulis sesuai arahan guru.'}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {formType === 'tugas' && !isJilidOffline && (
               <>
                 <div>
                   <label

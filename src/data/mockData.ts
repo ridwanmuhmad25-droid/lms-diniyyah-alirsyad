@@ -4,8 +4,10 @@ import {
   LearningItem,
   Student,
   SubjectName,
+  TahfidzRecord,
   Teacher,
 } from '../types/lms';
+import { getStudentTahfidzProfile } from '../lib/tahfidzUtils';
 
 export const DEFAULT_STUDENT_PASSWORD = 'diniyyah123';
 
@@ -22,6 +24,20 @@ export const ALL_CLASSES: ClassName[] = [
 ];
 
 export const ALL_GRADES: GradeLevel[] = ['X', 'XI', 'XII'];
+
+export const TAHFIDZ_ELIGIBLE_CLASSES: ClassName[] = [
+  ...GRADE_CLASSES.XI,
+  ...GRADE_CLASSES.XII,
+];
+
+// XI TKJ dan XI AK diajar oleh guru Tahfidz lain sehingga dikecualikan secara default
+export const DEFAULT_TAHFIDZ_TAUGHT_CLASSES: ClassName[] = [
+  'XI RPL',
+  'XI TP 1',
+  'XI TP 2',
+  'XII RPL',
+  'XII TKJ',
+];
 
 export const SUBJECT_META: Record<
   SubjectName,
@@ -93,10 +109,30 @@ export function toStudentAuthEmail(nis: string): string {
   return `siswa.${sanitized}@diniyyah.app`;
 }
 
-export function isItemForStudent(item: LearningItem, student: Student): boolean {
+export function isItemForStudent(
+  item: LearningItem,
+  student: Student,
+  tahfidzRecords: TahfidzRecord[] = [],
+  tahfidzTaughtClasses: ClassName[] = DEFAULT_TAHFIDZ_TAUGHT_CLASSES
+): boolean {
   const allowedSubjects = getSubjectsForClass(student.kelas);
   if (!allowedSubjects.includes(item.mapel)) return false;
   if (item.tingkat !== student.tingkat) return false;
   if (item.targetKelas !== 'ALL' && item.targetKelas !== student.kelas) return false;
+  if (
+    item.mapel === 'Tahfidz/Tahsin' &&
+    !tahfidzTaughtClasses.includes(student.kelas)
+  ) {
+    return false;
+  }
+  if (
+    item.mapel === 'Tahfidz/Tahsin' &&
+    item.type === 'tugas' &&
+    item.targetPeserta &&
+    item.targetPeserta !== 'Semua'
+  ) {
+    const { category } = getStudentTahfidzProfile(student, tahfidzRecords);
+    if (category !== item.targetPeserta) return false;
+  }
   return true;
 }
