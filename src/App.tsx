@@ -1745,12 +1745,74 @@ export default function App() {
 
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0B1120] flex flex-col items-center justify-center gap-3 text-slate-900 dark:text-slate-100">
-        <Loader2 className="h-7 w-7 animate-spin text-indigo-600 dark:text-cyan-400" />
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-          Menghubungkan ke Firebase...
-        </p>
-      </div>
+     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B1120] transition-colors">
+          <style>{`
+            @keyframes dzikirTuing {
+              0% {
+                opacity: 0;
+                transform: translateY(-22px) scale(0.94, 1.08);
+              }
+              4% {
+                opacity: 1;
+                transform: translateY(4px) scale(1.07, 0.91);
+              }
+              7% {
+                opacity: 1;
+                transform: translateY(-4px) scale(0.96, 1.04);
+              }
+              10% {
+                opacity: 1;
+                transform: translateY(1.5px) scale(1.02, 0.98);
+              }
+              13% {
+                opacity: 1;
+                transform: translateY(0px) scale(1, 1);
+              }
+              27% {
+                opacity: 1;
+                transform: translateY(0px) scale(1, 1);
+              }
+              33% {
+                opacity: 0;
+                transform: translateY(18px) scale(0.95, 1.05);
+              }
+              33.1%, 100% {
+                opacity: 0;
+                transform: translateY(-22px) scale(0.94, 1.08);
+              }
+            }
+            .dzikir-item {
+              position: absolute;
+              inset: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              opacity: 0;
+              animation: dzikirTuing 5.4s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+            }
+          `}</style>
+
+          <div className="relative h-8 w-44 overflow-hidden select-none">
+            <span
+              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
+              style={{ animationDelay: '0s' }}
+            >
+              Subhanallah
+            </span>
+            <span
+              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
+              style={{ animationDelay: '1.8s' }}
+            >
+              Alhamdulillah
+            </span>
+            <span
+              className="dzikir-item text-sm font-medium tracking-wide text-black dark:text-white"
+              style={{ animationDelay: '3.6s' }}
+            >
+              Allahuakbar
+            </span>
+          </div>
+        </div>
     );
   }
 
