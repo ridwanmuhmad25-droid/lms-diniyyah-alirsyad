@@ -35,6 +35,7 @@ import {
   DEFAULT_TAHFIDZ_TAUGHT_CLASSES,
   GURU_ADMIN_EMAIL,
   GURU_PROFILE,
+  getGradeFromClass,
   isAuthorizedGuruEmail,
   isValidClassName,
 } from './data/mockData';
@@ -63,6 +64,7 @@ import {
   KunciTugasDocument,
   LearningItem,
   MaterialReadRecord,
+  NilaiHarianSession,
   NotifikasiItem,
   NotifikasiReadRecord,
   PengumumanItem,
@@ -135,6 +137,7 @@ export default function App() {
   const [statistikKelas, setStatistikKelas] = useState<StatistikKelasItem[]>([]);
   const [pengumumanList, setPengumumanList] = useState<PengumumanItem[]>([]);
   const [ujianTahfidzList, setUjianTahfidzList] = useState<UjianTahfidzRecord[]>([]);
+  const [nilaiHarianList, setNilaiHarianList] = useState<NilaiHarianSession[]>([]);
   const [tahfidzTaughtClasses, setTahfidzTaughtClasses] = useState<ClassName[]>(
     DEFAULT_TAHFIDZ_TAUGHT_CLASSES
   );
@@ -168,6 +171,7 @@ export default function App() {
     setStatistikKelas([]);
     setPengumumanList([]);
     setUjianTahfidzList([]);
+    setNilaiHarianList([]);
     setTahfidzTaughtClasses(DEFAULT_TAHFIDZ_TAUGHT_CLASSES);
     setGuruStudentsLoaded(false);
     setGuruItemsLoaded(false);
@@ -584,6 +588,22 @@ export default function App() {
             handleFirestoreError(err, OperationType.GET, 'pengaturan_lms/tahfidz_kelas')
         )
       );
+
+      unsubscribers.push(
+        onSnapshot(
+          collection(db, 'nilai_harian'),
+          (snap) => {
+            const list = snap.docs.map((d) => d.data() as NilaiHarianSession);
+            list.sort((a, b) => {
+              const dateCmp = b.tanggal.localeCompare(a.tanggal);
+              if (dateCmp !== 0) return dateCmp;
+              return (b.createdAtMs || 0) - (a.createdAtMs || 0);
+            });
+            setNilaiHarianList(list);
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'nilai_harian')
+        )
+      );
     } else if (session.role === 'siswa' && session.nis && session.tingkat && session.kelas) {
       setSiswaItemsLoaded(false);
       setSiswaSubmissionsLoaded(false);
@@ -804,6 +824,25 @@ export default function App() {
           },
           (err) =>
             handleFirestoreError(err, OperationType.GET, 'pengaturan_lms/tahfidz_kelas')
+        )
+      );
+
+      unsubscribers.push(
+        onSnapshot(
+          query(
+            collection(db, 'nilai_harian'),
+            where('kelas', '==', studentClass)
+          ),
+          (snap) => {
+            const list = snap.docs.map((d) => d.data() as NilaiHarianSession);
+            list.sort((a, b) => {
+              const dateCmp = b.tanggal.localeCompare(a.tanggal);
+              if (dateCmp !== 0) return dateCmp;
+              return (b.createdAtMs || 0) - (a.createdAtMs || 0);
+            });
+            setNilaiHarianList(list);
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'nilai_harian')
         )
       );
     }
@@ -1687,6 +1726,59 @@ export default function App() {
     }
   };
 
+  const handleSaveNilaiHarian = async (payload: {
+    id?: string;
+    mapel: NilaiHarianSession['mapel'];
+    kelas: ClassName;
+    tanggal: string;
+    judul: string;
+    nilaiMap: Record<string, number>;
+    createdAtMs?: number;
+  }): Promise<string> => {
+    if (!firebaseUser) return '';
+    const nowMs = Date.now();
+    const id =
+      payload.id ||
+      `nh-${nowMs}-${Math.random().toString(36).slice(2, 7)}`;
+    const existing = payload.id
+      ? nilaiHarianList.find((s) => s.id === payload.id)
+      : undefined;
+    const cleanNilaiMap: Record<string, number> = {};
+    Object.entries(payload.nilaiMap).forEach(([nis, val]) => {
+      if (typeof val === 'number' && !Number.isNaN(val)) {
+        cleanNilaiMap[nis] = Math.min(100, Math.max(0, Math.round(val)));
+      }
+    });
+    const path = `nilai_harian/${id}`;
+    try {
+      await setDoc(doc(db, 'nilai_harian', id), {
+        id,
+        mapel: payload.mapel,
+        kelas: payload.kelas,
+        tingkat: getGradeFromClass(payload.kelas),
+        tanggal: payload.tanggal,
+        judul: payload.judul.trim(),
+        nilaiMap: cleanNilaiMap,
+        authorUid: existing?.authorUid || firebaseUser.uid,
+        createdAtMs: existing?.createdAtMs || payload.createdAtMs || nowMs,
+        updatedAt: serverTimestamp(),
+      });
+      return id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+      return id;
+    }
+  };
+
+  const handleDeleteNilaiHarian = async (sessionId: string) => {
+    const path = `nilai_harian/${sessionId}`;
+    try {
+      await deleteDoc(doc(db, 'nilai_harian', sessionId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
   const handleAddJilidBook = async (book: JilidBook) => {
     if (!firebaseUser) return;
     const path = `jilidBooks/${book.id}`;
@@ -2230,6 +2322,7 @@ export default function App() {
         submissions={submissions}
         tahfidzRecords={tahfidzRecords}
         ujianTahfidzList={ujianTahfidzList}
+        nilaiHarianList={nilaiHarianList}
         jilidBooks={jilidBooks}
         jilidProgress={jilidProgress}
         jadwalMapel={jadwalMapel}
@@ -2252,6 +2345,8 @@ export default function App() {
         onDeleteTahfidzRecord={handleDeleteTahfidzRecord}
         onAddUjianTahfidz={handleAddUjianTahfidz}
         onDeleteUjianTahfidz={handleDeleteUjianTahfidz}
+        onSaveNilaiHarian={handleSaveNilaiHarian}
+        onDeleteNilaiHarian={handleDeleteNilaiHarian}
         onAddJilidBook={handleAddJilidBook}
         onDeleteJilidBook={handleDeleteJilidBook}
         onAddJadwalMapel={handleAddJadwalMapel}
@@ -2370,6 +2465,7 @@ export default function App() {
       submissions={submissions}
       tahfidzRecords={tahfidzRecords}
       ujianTahfidzList={ujianTahfidzList}
+      nilaiHarianList={nilaiHarianList}
       jilidBooks={jilidBooks}
       jilidProgress={jilidProgress}
       jadwalMapel={jadwalMapel}

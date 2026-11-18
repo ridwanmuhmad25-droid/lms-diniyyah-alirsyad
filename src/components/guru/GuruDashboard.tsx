@@ -68,6 +68,7 @@ import {
   LearningItem,
   LearningItemType,
   MaterialReadRecord,
+  NilaiHarianSession,
   NotifikasiItem,
   PengumumanItem,
   PengumumanTargetTingkat,
@@ -122,6 +123,7 @@ import {
 import { KamusArabView } from './KamusArabView';
 import { LaporanHarianTahfidzView } from './LaporanHarianTahfidzView';
 import { ManajemenBukuJilidView } from './ManajemenBukuJilidView';
+import { NilaiHarianGuruView } from './NilaiHarianGuruView';
 import { SubjectMaterialsView } from './SubjectMaterialsView';
 import { UjianKenaikanJuzView } from './UjianKenaikanJuzView';
 
@@ -134,6 +136,7 @@ type GuruTab =
   | 'ujian_tahfidz'
   | 'jilid'
   | 'laporan'
+  | 'nilai_harian'
   | 'kamus';
 
 interface GuruDashboardProps {
@@ -146,6 +149,7 @@ interface GuruDashboardProps {
   submissions: AssignmentSubmission[];
   tahfidzRecords: TahfidzRecord[];
   ujianTahfidzList?: UjianTahfidzRecord[];
+  nilaiHarianList?: NilaiHarianSession[];
   jilidBooks: JilidBook[];
   jilidProgress: JilidReadProgress[];
   jadwalMapel: JadwalMapelItem[];
@@ -195,6 +199,16 @@ interface GuruDashboardProps {
     catatan: string;
   }) => Promise<void>;
   onDeleteUjianTahfidz: (examId: string) => Promise<void>;
+  onSaveNilaiHarian?: (payload: {
+    id?: string;
+    mapel: SubjectName;
+    kelas: ClassName;
+    tanggal: string;
+    judul: string;
+    nilaiMap: Record<string, number>;
+    createdAtMs?: number;
+  }) => Promise<string>;
+  onDeleteNilaiHarian?: (sessionId: string) => Promise<void>;
   onAddJilidBook: (book: JilidBook) => Promise<void>;
   onDeleteJilidBook: (book: JilidBook) => Promise<void>;
   onAddJadwalMapel: (jadwal: Omit<JadwalMapelItem, 'id' | 'authorUid'>) => Promise<void>;
@@ -228,6 +242,7 @@ export function GuruDashboard({
   submissions,
   tahfidzRecords,
   ujianTahfidzList = [],
+  nilaiHarianList = [],
   jilidBooks,
   jilidProgress,
   jadwalMapel,
@@ -250,6 +265,8 @@ export function GuruDashboard({
   onDeleteTahfidzRecord,
   onAddUjianTahfidz,
   onDeleteUjianTahfidz,
+  onSaveNilaiHarian,
+  onDeleteNilaiHarian,
   onAddJilidBook,
   onDeleteJilidBook,
   onAddJadwalMapel,
@@ -1109,6 +1126,12 @@ export function GuruDashboard({
       icon: <ClipboardList className="h-4 w-4 shrink-0" />,
     },
     {
+      id: 'nilai_harian',
+      label: 'Nilai Harian',
+      shortLabel: 'Nilai Harian',
+      icon: <ClipboardCheck className="h-4 w-4 shrink-0" />,
+    },
+    {
       id: 'kamus',
       label: 'Kamus Arab',
       shortLabel: 'Kamus',
@@ -1156,6 +1179,10 @@ export function GuruDashboard({
       active: 'bg-gradient-to-br from-teal-500 to-emerald-500 text-white shadow-md shadow-teal-500/30',
       inactive: 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-300',
     },
+    nilai_harian: {
+      active: 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/30',
+      inactive: 'bg-violet-500/15 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300',
+    },
     kamus: {
       active: 'bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-md shadow-cyan-500/30',
       inactive: 'bg-cyan-500/15 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300',
@@ -1187,6 +1214,7 @@ export function GuruDashboard({
     ujian_tahfidz: 'Ujian Tahfidz & Kenaikan Juz Otomatis',
     jilid: 'Manajemen Buku Jilid & Laporan Bacaan',
     laporan: 'Laporan Baca, Setoran & Status Tugas',
+    nilai_harian: 'Nilai Harian Bertanggal & Deteksi Susulan',
     kamus: 'Kamus Arab (Indonesia ↔ Arab)',
   };
 
@@ -3629,6 +3657,18 @@ export function GuruDashboard({
               jilidProgress={jilidProgress}
               onAddJilidBook={onAddJilidBook}
               onDeleteJilidBook={onDeleteJilidBook}
+              onNotify={showToast}
+            />
+          )}
+
+          {/* TAB NILAI HARIAN BERTANGGAL */}
+          {activeTab === 'nilai_harian' && onSaveNilaiHarian && onDeleteNilaiHarian && (
+            <NilaiHarianGuruView
+              students={students}
+              nilaiHarianList={nilaiHarianList}
+              tahfidzClasses={tahfidzAvailableClasses}
+              onSaveNilaiHarian={onSaveNilaiHarian}
+              onDeleteNilaiHarian={onDeleteNilaiHarian}
               onNotify={showToast}
             />
           )}

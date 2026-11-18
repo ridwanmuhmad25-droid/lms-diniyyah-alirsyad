@@ -374,6 +374,18 @@ export interface StatistikKelasItem {
   authorUid: string;
 }
 
+export interface NilaiHarianSession {
+  id: string;
+  mapel: SubjectName;
+  kelas: ClassName;
+  tingkat: GradeLevel;
+  tanggal: string; // YYYY-MM-DD
+  judul: string;
+  nilaiMap: Record<string, number>;
+  authorUid: string;
+  createdAtMs: number;
+}
+
 export interface LmsState {
   students: Student[];
   learningItems: LearningItem[];
@@ -383,4 +395,5 @@ export interface LmsState {
   jilidBooks: JilidBook[];
   jilidProgress: JilidReadProgress[];
 }
+
 

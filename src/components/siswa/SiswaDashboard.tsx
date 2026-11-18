@@ -45,6 +45,7 @@ import {
   JilidReadProgress,
   LearningItem,
   MaterialReadRecord,
+  NilaiHarianSession,
   NotifikasiItem,
   NotifikasiReadRecord,
   PengumumanItem,
@@ -82,8 +83,9 @@ import {
   getSubjectTheme,
 } from '../../lib/themePalette';
 import { EbookReaderModal } from './EbookReaderModal';
+import { NilaiHarianSiswaView } from './NilaiHarianSiswaView';
 
-type SiswaTab = 'beranda' | 'mapel' | 'jilid' | 'kamus' | 'akun';
+type SiswaTab = 'beranda' | 'mapel' | 'jilid' | 'nilai_harian' | 'kamus' | 'akun';
 
 const siswaNavIconContainers: Record<
   SiswaTab,
@@ -100,6 +102,10 @@ const siswaNavIconContainers: Record<
   jilid: {
     active: 'bg-gradient-to-br from-indigo-500 to-cyan-500 text-white shadow-md shadow-cyan-500/30',
     inactive: 'bg-cyan-500/12 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300',
+  },
+  nilai_harian: {
+    active: 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/30',
+    inactive: 'bg-violet-500/12 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300',
   },
   kamus: {
     active: 'bg-gradient-to-br from-cyan-500 to-teal-500 text-white shadow-md shadow-teal-500/30',
@@ -119,6 +125,7 @@ interface SiswaDashboardProps {
   submissions: AssignmentSubmission[];
   tahfidzRecords: TahfidzRecord[];
   ujianTahfidzList?: UjianTahfidzRecord[];
+  nilaiHarianList?: NilaiHarianSession[];
   jilidBooks: JilidBook[];
   jilidProgress: JilidReadProgress[];
   jadwalMapel: JadwalMapelItem[];
@@ -152,6 +159,7 @@ export function SiswaDashboard({
   submissions,
   tahfidzRecords,
   ujianTahfidzList = [],
+  nilaiHarianList = [],
   jilidBooks,
   jilidProgress,
   jadwalMapel,
@@ -384,6 +392,48 @@ export function SiswaDashboard({
             </div>
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const missingNilaiHarianSessions = useMemo(() => {
+    return nilaiHarianList.filter((s) => {
+      if (s.kelas !== student.kelas) return false;
+      if (!visibleSubjects.includes(s.mapel)) return false;
+      const score = s.nilaiMap?.[student.nis];
+      return typeof score !== 'number' || Number.isNaN(score);
+    });
+  }, [nilaiHarianList, student.kelas, student.nis, visibleSubjects]);
+
+  const renderMissingNilaiHarianBanner = () => {
+    if (missingNilaiHarianSessions.length === 0) return null;
+    return (
+      <div
+        role="region"
+        aria-label="Peringatan Nilai Harian Kosong"
+        className="rounded-2xl border border-amber-300/90 dark:border-rose-600/60 bg-gradient-to-r from-amber-50 via-orange-50 to-rose-50 dark:from-amber-950/50 dark:via-orange-950/40 dark:to-rose-950/45 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-500 to-rose-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 space-y-0.5">
+            <p className="font-display text-xs sm:text-sm font-bold text-rose-950 dark:text-amber-100">
+              {missingNilaiHarianSessions.length} Nilai Harian Kosong / Belum Mengerjakan
+            </p>
+            <p className="text-xs text-amber-950/90 dark:text-amber-200/90">
+              Terdapat penilaian kelas {student.kelas} yang nilainya masih kosong — segera susul ke guru agar tidak tertinggal.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => selectTab('nilai_harian')}
+          className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-600 hover:to-rose-600 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 shadow-sm shrink-0"
+        >
+          <span>Cek Nilai Harian</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
       </div>
     );
   };
@@ -736,6 +786,57 @@ export function SiswaDashboard({
               )}
             </button>
 
+            <button
+              type="button"
+              onClick={() => selectTab('nilai_harian')}
+              aria-label="Nilai Harian"
+              className={`group relative w-full min-h-[44px] py-2 rounded-2xl text-sm font-medium flex items-center transition-all whitespace-nowrap ${
+                isSidebarOpen
+                  ? 'px-2.5 justify-start gap-3'
+                  : 'px-0 justify-center'
+              } ${
+                activeTab === 'nilai_harian'
+                  ? 'bg-violet-50/90 dark:bg-white/10 text-slate-900 dark:text-white font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              {activeTab === 'nilai_harian' && (
+                <span
+                  aria-hidden="true"
+                  className={`absolute top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-gradient-to-b from-violet-600 to-indigo-600 ${
+                    isSidebarOpen ? '-left-3' : '-left-2'
+                  }`}
+                />
+              )}
+              <span
+                className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+                  activeTab === 'nilai_harian'
+                    ? siswaNavIconContainers.nilai_harian.active
+                    : siswaNavIconContainers.nilai_harian.inactive
+                }`}
+              >
+                <ClipboardCheck className="h-4 w-4 shrink-0" />
+              </span>
+              {isSidebarOpen && (
+                <span className="flex items-center gap-2 min-w-0">
+                  <span>Nilai Harian</span>
+                  {missingNilaiHarianSessions.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold tabular-nums">
+                      {missingNilaiHarianSessions.length}
+                    </span>
+                  )}
+                </span>
+              )}
+              {!isSidebarOpen && (
+                <span
+                  role="tooltip"
+                  className="pointer-events-none opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:translate-x-0 transition-all duration-150 absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 whitespace-nowrap bg-slate-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg shadow-lg border border-slate-700/80"
+                >
+                  Nilai Harian{missingNilaiHarianSessions.length > 0 ? ` (${missingNilaiHarianSessions.length} Kosong)` : ''}
+                </span>
+              )}
+            </button>
+
             {isSidebarOpen ? (
               <p className="px-2.5 pt-3 pb-1 text-[10px] font-bold tracking-wider uppercase text-slate-400 dark:text-slate-500">
                 LAINNYA
@@ -987,6 +1088,34 @@ export function SiswaDashboard({
 
               <button
                 type="button"
+                onClick={() => selectTab('nilai_harian')}
+                className={`w-full min-h-[44px] px-2.5 py-2 rounded-2xl text-sm font-medium flex items-center justify-between gap-2 transition-all whitespace-nowrap ${
+                  activeTab === 'nilai_harian'
+                    ? 'bg-violet-50/90 dark:bg-white/10 text-slate-900 dark:text-white font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-white/5'
+                }`}
+              >
+                <span className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 ${
+                      activeTab === 'nilai_harian'
+                        ? siswaNavIconContainers.nilai_harian.active
+                        : siswaNavIconContainers.nilai_harian.inactive
+                    }`}
+                  >
+                    <ClipboardCheck className="h-4 w-4 shrink-0" />
+                  </span>
+                  <span>Nilai Harian</span>
+                </span>
+                {missingNilaiHarianSessions.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold tabular-nums">
+                    {missingNilaiHarianSessions.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={() => selectTab('kamus')}
                 className={`w-full min-h-[44px] px-2.5 py-2 rounded-2xl text-sm font-medium flex items-center gap-3 transition-all whitespace-nowrap ${
                   activeTab === 'kamus'
@@ -1087,6 +1216,8 @@ export function SiswaDashboard({
                 ? `Dashboard Mapel — ${student.kelas}`
                 : activeTab === 'jilid'
                 ? 'E-Book Jilid Interaktif'
+                : activeTab === 'nilai_harian'
+                ? `Nilai Harian — ${student.kelas}`
                 : activeTab === 'kamus'
                 ? 'Kamus Arab (Indonesia ↔ Arab)'
                 : 'Pengaturan Akun Siswa'}
@@ -1181,6 +1312,7 @@ export function SiswaDashboard({
           {activeTab === 'beranda' && (
             <div className="space-y-6">
               {renderPersistentJilidWarning()}
+              {renderMissingNilaiHarianBanner()}
 
               {/* Student Welcome & Stats Banner */}
               <div
@@ -2263,6 +2395,15 @@ export function SiswaDashboard({
             </div>
           )}
 
+          {/* TAB NILAI HARIAN SISWA */}
+          {activeTab === 'nilai_harian' && (
+            <NilaiHarianSiswaView
+              student={student}
+              visibleSubjects={visibleSubjects}
+              nilaiHarianList={nilaiHarianList}
+            />
+          )}
+
           {/* TAB 3: KAMUS ARAB */}
           {activeTab === 'kamus' && <KamusArabView />}
         </main>
@@ -2272,7 +2413,7 @@ export function SiswaDashboard({
       {!hasActiveLockedExam && (
         <nav
           aria-label="Navigasi Bawah Siswa"
-          className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800/80 grid grid-cols-5 h-16"
+          className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800/80 grid grid-cols-6 h-16"
         >
           <button
             type="button"
@@ -2311,6 +2452,22 @@ export function SiswaDashboard({
           >
             <Library className="h-4 w-4" />
             <span>Jilid</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => selectTab('nilai_harian')}
+            className={`relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-[11px] font-medium transition-colors ${
+              activeTab === 'nilai_harian'
+                ? 'text-violet-600 dark:text-violet-400 font-semibold'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            <span>Nilai</span>
+            {missingNilaiHarianSessions.length > 0 && (
+              <span className="absolute top-1.5 right-3 h-2 w-2 rounded-full bg-rose-500" />
+            )}
           </button>
 
           <button

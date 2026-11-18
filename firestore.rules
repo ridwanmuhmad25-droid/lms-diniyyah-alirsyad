@@ -772,6 +772,51 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(settingId) && isAdmin();
     }
 
+    function isValidNilaiHarian(data) {
+      return data.keys().hasAll(['id', 'mapel', 'kelas', 'tingkat', 'tanggal', 'judul', 'nilaiMap', 'authorUid', 'createdAtMs', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'mapel', 'kelas', 'tingkat', 'tanggal', 'judul', 'nilaiMap', 'authorUid', 'createdAtMs', 'updatedAt']) &&
+        data.id is string && isValidId(data.id) &&
+        data.mapel in ['Aqidah', 'Tahfidz/Tahsin', 'Bahasa Arab'] &&
+        data.kelas in [
+          'X RPL', 'X TKJ', 'X AK', 'X TP 1', 'X TP 2',
+          'XI RPL', 'XI TKJ', 'XI AK', 'XI TP 1', 'XI TP 2',
+          'XII RPL', 'XII TKJ'
+        ] &&
+        data.tingkat in ['X', 'XI', 'XII'] &&
+        data.tanggal is string && data.tanggal.size() == 10 && data.tanggal.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.judul is string && data.judul.size() >= 1 && data.judul.size() <= 150 &&
+        data.nilaiMap is map && data.nilaiMap.size() <= 100 &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.createdAtMs is number && data.createdAtMs >= 1000000000000 && data.createdAtMs <= 9999999999999 &&
+        data.updatedAt == request.time;
+    }
+
+    match /nilai_harian/{sessionId} {
+      allow get: if isSignedIn() && isValidId(sessionId) && (
+        isAdmin() ||
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+      allow list: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.kelas in [
+          'X RPL', 'X TKJ', 'X AK', 'X TP 1', 'X TP 2',
+          'XI RPL', 'XI TKJ', 'XI AK', 'XI TP 1', 'XI TP 2',
+          'XII RPL', 'XII TKJ'
+        ]
+      );
+      allow create: if isSignedIn() && isValidId(sessionId) &&
+        isValidNilaiHarian(incoming()) &&
+        incoming().id == sessionId &&
+        incoming().authorUid == request.auth.uid &&
+        isAdmin();
+      allow update: if isSignedIn() && isValidId(sessionId) &&
+        isValidNilaiHarian(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().authorUid == existing().authorUid &&
+        isAdmin();
+      allow delete: if isSignedIn() && isValidId(sessionId) && isAdmin();
+    }
+
     match /ujian_tahfidz/{examId} {
       allow get: if isSignedIn() && isValidId(examId) && (
         isAdmin() ||

@@ -352,6 +352,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "kelasAmpu", "authorUid", "updatedAt"]
+    },
+    "NilaiHarian": {
+      "title": "NilaiHarian",
+      "description": "Manual dated daily assessment session and per-student numeric scores (0-100) managed by Guru.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "mapel": { "type": "string", "enum": ["Aqidah", "Tahfidz/Tahsin", "Bahasa Arab"] },
+        "kelas": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "tingkat": { "type": "string", "enum": ["X", "XI", "XII"] },
+        "tanggal": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "judul": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "nilaiMap": { "type": "object" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAtMs": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "mapel", "kelas", "tingkat", "tanggal", "judul", "nilaiMap", "authorUid", "createdAtMs", "updatedAt"]
     }
   },
   "firestore": {
@@ -430,6 +448,10 @@
     "/pengaturan_lms/{settingId}": {
       "schema": { "$ref": "#/entities/PengaturanTahfidzKelas" },
       "description": "LMS configuration documents such as Tahfidz taught classes managed by Guru."
+    },
+    "/nilai_harian/{sessionId}": {
+      "schema": { "$ref": "#/entities/NilaiHarian" },
+      "description": "Manual dated daily assessment sessions and student score maps per class and subject."
     }
   }
 }
